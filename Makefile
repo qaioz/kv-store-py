@@ -1,7 +1,7 @@
 .PHONY: install test lint format check clean
 
 install:
-	pip install -e .[dev]
+	uv pip install -e ".[dev]"
 
 test:
 	pytest
