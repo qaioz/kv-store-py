@@ -22,19 +22,20 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - name: Install uv
-      run: |
-        pip install uv
+      uses: astral-sh/setup-uv@v4
+      with:
+        version: "latest"
 
     - name: Install dependencies
       run: |
-        uv pip install -e ".[dev]"
-    
+        uv sync --group dev
+
     - name: Run checks
       run: |
-        black --check .
-        isort --check-only .
-        flake8 .
-    
+        uv run black --check .
+        uv run isort --check-only .
+        uv run flake8 .
+
     - name: Run tests
       run: |
-        pytest
+        uv run pytest

@@ -1,17 +1,17 @@
 .PHONY: install test lint format check clean
 
 install:
-	uv pip install -e ".[dev]"
+	uv sync --group dev
 
 test:
-	pytest
+	uv run pytest
 
 lint:
-	flake8 .
+	uv run flake8 .
 
 format:
-	black .
-	isort .
+	uv run black .
+	uv run isort .
 
 check: format lint test
 
