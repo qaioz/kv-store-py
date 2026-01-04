@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Any
+from typing import Any, Optional
+
 
 class AbstractStore(ABC):
     """Abstract base class for key-value stores (Async)."""
@@ -18,4 +19,3 @@ class AbstractStore(ABC):
     async def delete(self, key: str) -> bool:
         """Delete a value from the store."""
         pass
-

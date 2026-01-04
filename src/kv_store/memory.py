@@ -1,6 +1,8 @@
 from time import time
-from typing import Optional, Any
+from typing import Any, Optional
+
 from .base import AbstractStore
+
 
 class InMemoryStore(AbstractStore):
     """

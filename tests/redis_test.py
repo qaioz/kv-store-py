@@ -1,13 +1,16 @@
-from src.kv_store import RedisStore
-from redis.asyncio import Redis
 import pytest
 import pytest_asyncio
+from redis.asyncio import Redis
+
+from src.kv_store import RedisStore
+
 
 @pytest_asyncio.fixture
 async def redis_client():
-    client = Redis(host="localhost", port=6379, db=0, password='grunge38')
+    client = Redis(host="localhost", port=6379, db=0, password="grunge38")
     yield client
     await client.aclose()
+
 
 @pytest_asyncio.fixture
 async def redis_store(redis_client):
@@ -19,11 +22,11 @@ async def test_set_and_get_dict(redis_store):
     """Test setting and getting a dictionary value."""
     test_key = "test:dict:key"
     test_value = {"name": "John", "age": "30", "city": "NYC"}
-    
+
     # Set the value
     result = await redis_store.set(test_key, test_value, ttl=60)
     assert result is True
-    
+
     # Get the value
     retrieved = await redis_store.get(test_key)
     assert retrieved == {b"name": b"John", b"age": b"30", b"city": b"NYC"}
@@ -34,12 +37,11 @@ async def test_set_and_get_string(redis_store):
     """Test setting and getting a string value."""
     test_key = "test:string:key"
     test_value = "Hello World"
-    
+
     # Set the value
     result = await redis_store.set(test_key, test_value, ttl=1)
     assert result is True
 
-    
     # Get the value
     retrieved = await redis_store.get(test_key)
     assert retrieved == b"Hello World"  # Redis returns bytes for string values
@@ -97,6 +99,7 @@ async def test_overwrite_string_with_dict(redis_store):
 async def test_expiration(redis_store):
     """Test that keys expire after TTL."""
     import asyncio
+
     test_key = "test:expire:key"
     test_value = "This will expire"
 
@@ -165,5 +168,3 @@ async def test_set_get_delete_get_other_types(redis_store):
     # Get after delete - should be None
     retrieved = await redis_store.get(test_key)
     assert retrieved is None
-
-

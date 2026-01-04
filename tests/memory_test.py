@@ -1,6 +1,7 @@
-from src.kv_store import InMemoryStore
 import pytest
 import pytest_asyncio
+
+from src.kv_store import InMemoryStore
 
 
 @pytest_asyncio.fixture
@@ -90,6 +91,7 @@ async def test_overwrite_string_with_dict(memory_store):
 async def test_expiration(memory_store):
     """Test that keys expire after TTL."""
     import asyncio
+
     test_key = "test:expire:key"
     test_value = "This will expire"
 
@@ -132,6 +134,7 @@ async def test_set_with_zero_ttl(memory_store):
 
     # Sleep for a bit and check again
     import asyncio
+
     await asyncio.sleep(0.1)
 
     retrieved = await memory_store.get(test_key)
