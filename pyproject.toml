@@ -3,8 +3,8 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "kv-store"
-version = "0.0.1"
+name = "kv-store-py"
+version = "0.0.2"
 description = "A simple wrapper for key-value stores supporting Python dict, Redis, Valkey, Memcached, and SQLite and other backend clients."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -30,7 +30,6 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: System :: Distributed Computing",
     "Topic :: Utilities",
-    "Topic :: Database :: Key-Value",
     "Topic :: Software Development :: Libraries :: Application Frameworks",
 ]
 
