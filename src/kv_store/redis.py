@@ -6,7 +6,7 @@ class RedisStore(AbstractStore):
     def __init__(self, client: redis.Redis):
         self.client = client
 
-    async def get(self, key: str) -> Optional[Any]:
+    async def get(self, key: str, default: Optional[Any] = None) -> Optional[Any]:
         key_type = await self.client.type(key)
 
         if key_type == b'hash':
@@ -14,7 +14,7 @@ class RedisStore(AbstractStore):
         elif key_type == b'string':
             return await self.client.get(key)
         else:
-            return None
+            return default
 
     async def set(self, key: str, value: Any, ttl: int) -> bool:
         if isinstance(value, dict):
@@ -37,3 +37,11 @@ class RedisStore(AbstractStore):
     async def delete(self, key: str) -> bool:
         result = await self.client.delete(key)
         return result > 0
+
+    async def get_many(self, keys: list[str], default: Optional[Any] = None) -> list[Optional[Any]]:
+        """Get multiple values from the store."""
+        pass
+
+    async def set_many(self, items: dict[str, Any], ttl: int) -> list[bool]:
+        """Set multiple values in the store with TTL."""
+        pass

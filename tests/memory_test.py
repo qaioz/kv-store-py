@@ -203,3 +203,64 @@ async def test_set_get_delete_get_other_types(memory_store):
     # Get after delete - should be None
     retrieved = await memory_store.get(test_key)
     assert retrieved is None
+
+
+@pytest.mark.asyncio
+async def test_get_with_default_nonexistent_key(memory_store):
+    """Test getting a nonexistent key with a default value."""
+    test_key = "nonexistent:key"
+    default_value = "default_value"
+
+    # Get nonexistent key with default
+    retrieved = await memory_store.get(test_key, default=default_value)
+    assert retrieved == default_value
+
+    # Test with different default types
+    assert await memory_store.get("another:nonexistent", default=42) == 42
+    assert await memory_store.get("third:nonexistent", default={"key": "value"}) == {"key": "value"}
+    assert await memory_store.get("fourth:nonexistent", default=None) is None
+
+
+@pytest.mark.asyncio
+async def test_get_with_default_expired_key(memory_store):
+    """Test getting an expired key with a default value."""
+    import asyncio
+    test_key = "test:expired:default:key"
+    test_value = "This will expire"
+    default_value = "default_after_expiry"
+
+    # Set the value with 1 second TTL
+    result = await memory_store.set(test_key, test_value, ttl=1)
+    assert result is True
+
+    # Verify it's stored
+    retrieved = await memory_store.get(test_key)
+    assert retrieved == test_value
+
+    # Sleep for more than 1 second to let it expire
+    await asyncio.sleep(1.1)
+
+    # Get the expired key with default - should return default
+    retrieved = await memory_store.get(test_key, default=default_value)
+    assert retrieved == default_value
+
+    # Get the expired key without default - should return None
+    retrieved = await memory_store.get(test_key)
+    assert retrieved is None
+
+
+@pytest.mark.asyncio
+async def test_get_with_default_existing_key(memory_store):
+    """Test getting an existing key with a default value (should return actual value)."""
+    test_key = "test:existing:default:key"
+    test_value = "actual_value"
+    default_value = "should_not_be_returned"
+
+    # Set the value
+    result = await memory_store.set(test_key, test_value, ttl=60)
+    assert result is True
+
+    # Get the existing key with default - should return actual value, not default
+    retrieved = await memory_store.get(test_key, default=default_value)
+    assert retrieved == test_value
+    assert retrieved != default_value
