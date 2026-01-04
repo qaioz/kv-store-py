@@ -40,8 +40,71 @@ class RedisStore(AbstractStore):
 
     async def get_many(self, keys: list[str], default: Optional[Any] = None) -> list[Optional[Any]]:
         """Get multiple values from the store."""
-        pass
+        if not keys:
+            return []
+
+        # Get types for all keys first
+        pipeline = self.client.pipeline()
+        for key in keys:
+            pipeline.type(key)
+
+        # Execute to get all key types
+        types_results = await pipeline.execute()
+
+        # Separate keys by type and track their positions
+        string_keys = []
+        hash_keys = []
+        key_to_index = {}
+
+        for i, (key, key_type) in enumerate(zip(keys, types_results)):
+            key_to_index[key] = i
+            if key_type == b'string':
+                string_keys.append(key)
+            elif key_type == b'hash':
+                hash_keys.append(key)
+
+        # Initialize results with defaults
+        results = [default] * len(keys)
+
+        # Batch get string values using MGET
+        if string_keys:
+            string_values = await self.client.mget(string_keys)
+            for key, value in zip(string_keys, string_values):
+                results[key_to_index[key]] = value
+
+        # Batch get hash values using pipelined HGETALL
+        if hash_keys:
+            hash_pipeline = self.client.pipeline()
+            for key in hash_keys:
+                hash_pipeline.hgetall(key)
+            hash_results = await hash_pipeline.execute()
+
+            for key, hash_value in zip(hash_keys, hash_results):
+                results[key_to_index[key]] = hash_value if hash_value else default
+
+        return results
 
     async def set_many(self, items: dict[str, Any], ttl: int) -> list[bool]:
         """Set multiple values in the store with TTL."""
-        pass
+        results = []
+        pipeline = self.client.pipeline()
+
+        for key, value in items.items():
+            if isinstance(value, dict):
+                # Handle dict values with hset
+                key_type = await self.client.type(key)
+                if key_type != b'hash' and key_type != b'none':
+                    pipeline.delete(key)
+                pipeline.hset(key, mapping=value)
+                pipeline.expire(key, ttl)
+                results.append(True)  # We'll check this after execution
+            else:
+                # Handle simple values - convert to string if needed
+                if not isinstance(value, (str, bytes, int, float)):
+                    value = str(value)
+                # Use set command for each simple value with TTL
+                pipeline.set(key, value, ex=ttl)
+                results.append(True)
+
+        await pipeline.execute()
+        return results

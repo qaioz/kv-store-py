@@ -37,8 +37,21 @@ class InMemoryStore(AbstractStore):
 
     async def get_many(self, keys: list[str], default: Optional[Any] = None) -> list[Optional[Any]]:
         """Get multiple values from the store."""
-        pass
+        if not keys:
+            return []
+
+        results = []
+        for key in keys:
+            result = await self.get(key, default)
+            results.append(result)
+
+        return results
 
     async def set_many(self, items: dict[str, Any], ttl: int) -> list[bool]:
         """Set multiple values in the store with TTL."""
-        pass
+        results = []
+        for key, value in items.items():
+            result = await self.set(key, value, ttl)
+            results.append(result)
+
+        return results

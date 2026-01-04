@@ -228,3 +228,153 @@ async def test_get_with_default_existing_key(redis_store):
     assert retrieved != default_value
 
 
+@pytest.mark.asyncio
+async def test_get_many_empty_list(redis_store):
+    """Test get_many with empty list returns empty list."""
+    result = await redis_store.get_many([])
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_get_many_mixed_keys(redis_store):
+    """Test get_many with mixed string and dict keys."""
+    string_key = "test:many:string:key"
+    dict_key = "test:many:dict:key"
+    nonexistent_key = "test:many:nonexistent:key"
+
+    string_value = "Hello World"
+    dict_value = {"name": "John", "age": "30"}
+
+    # Set values
+    await redis_store.set(string_key, string_value, ttl=60)
+    await redis_store.set(dict_key, dict_value, ttl=60)
+
+    # Get many values
+    keys = [string_key, dict_key, nonexistent_key]
+    results = await redis_store.get_many(keys)
+
+    assert len(results) == 3
+    assert results[0] == b"Hello World"
+    assert results[1] == {b"name": b"John", b"age": b"30"}
+    assert results[2] is None
+
+
+@pytest.mark.asyncio
+async def test_get_many_with_default(redis_store):
+    """Test get_many with default values for missing keys."""
+    existing_key = "test:many:default:existing"
+    nonexistent_key = "test:many:default:nonexistent"
+
+    await redis_store.set(existing_key, "existing value", ttl=60)
+
+    keys = [existing_key, nonexistent_key]
+    default_value = "my_default"
+    results = await redis_store.get_many(keys, default=default_value)
+
+    assert len(results) == 2
+    assert results[0] == b"existing value"
+    assert results[1] == default_value
+
+
+@pytest.mark.asyncio
+async def test_get_many_order_preservation(redis_store):
+    """Test that get_many preserves order of keys."""
+    keys = ["key3", "key1", "key2"]
+    values = ["value3", "value1", "value2"]
+
+    # Set values in different order
+    for key, value in zip(keys, values):
+        await redis_store.set(key, value, ttl=60)
+
+    # Get them back in same order
+    results = await redis_store.get_many(keys)
+    expected = [b"value3", b"value1", b"value2"]
+
+    assert results == expected
+
+
+@pytest.mark.asyncio
+async def test_get_many_only_string_keys(redis_store):
+    """Test get_many with only string keys."""
+    keys = ["str1", "str2", "str3"]
+    values = ["val1", "val2", "val3"]
+
+    for key, value in zip(keys, values):
+        await redis_store.set(key, value, ttl=60)
+
+    results = await redis_store.get_many(keys)
+    expected = [b"val1", b"val2", b"val3"]
+
+    assert results == expected
+
+
+@pytest.mark.asyncio
+async def test_get_many_only_hash_keys(redis_store):
+    """Test get_many with only hash/dict keys."""
+    keys = ["hash1", "hash2"]
+    values = [
+        {"a": "1", "b": "2"},
+        {"x": "10", "y": "20"}
+    ]
+
+    for key, value in zip(keys, values):
+        await redis_store.set(key, value, ttl=60)
+
+    results = await redis_store.get_many(keys)
+
+    assert len(results) == 2
+    assert results[0] == {b"a": b"1", b"b": b"2"}
+    assert results[1] == {b"x": b"10", b"y": b"20"}
+
+
+@pytest.mark.asyncio
+async def test_get_many_expired_keys(redis_store):
+    """Test get_many with expired keys."""
+    import asyncio
+
+    key1 = "test:many:expired:1"
+    key2 = "test:many:expired:2"
+
+    await redis_store.set(key1, "value1", ttl=1)
+    await redis_store.set(key2, "value2", ttl=1)
+
+    # Verify they're set
+    results = await redis_store.get_many([key1, key2])
+    assert results == [b"value1", b"value2"]
+
+    # Wait for expiration
+    await asyncio.sleep(1.1)
+
+    # Get expired keys with default
+    results = await redis_store.get_many([key1, key2], default="expired_default")
+    assert results == ["expired_default", "expired_default"]
+
+    # Get expired keys without default
+    results = await redis_store.get_many([key1, key2])
+    assert results == [None, None]
+
+
+@pytest.mark.asyncio
+async def test_get_many_different_default_types(redis_store):
+    """Test get_many with different default value types."""
+    existing_key = "test:many:defaults:existing"
+    nonexistent_keys = ["missing1", "missing2", "missing3"]
+
+    await redis_store.set(existing_key, "exists", ttl=60)
+
+    keys = [existing_key] + nonexistent_keys
+
+    # Test with string default
+    results = await redis_store.get_many(keys, default="string_default")
+    assert results[0] == b"exists"
+    assert all(r == "string_default" for r in results[1:])
+
+    # Test with dict default
+    results = await redis_store.get_many(nonexistent_keys, default={"key": "value"})
+    assert all(r == {"key": "value"} for r in results)
+
+    # Test with None default
+    results = await redis_store.get_many(nonexistent_keys, default=None)
+    assert all(r is None for r in results)
+
+
