@@ -126,7 +126,7 @@ async def test_set_get_delete_get_other_types(redis_store):
     result = await redis_store.set(test_key, int_value, ttl=60)
     assert result is True
     retrieved = await redis_store.get(test_key)
-    assert retrieved == "42"
+    assert retrieved == 42
 
     # Delete the key
     delete_result = await redis_store.delete(test_key)
@@ -141,7 +141,7 @@ async def test_set_get_delete_get_other_types(redis_store):
     result = await redis_store.set(test_key, float_value, ttl=60)
     assert result is True
     retrieved = await redis_store.get(test_key)
-    assert retrieved == "3.14159"
+    assert retrieved == 3.14159
 
     # Delete the key
     delete_result = await redis_store.delete(test_key)
@@ -151,12 +151,12 @@ async def test_set_get_delete_get_other_types(redis_store):
     retrieved = await redis_store.get(test_key)
     assert retrieved is None
 
-    # Test with list (will be converted to string)
+    # Test with list
     list_value = [1, 2, 3, "test"]
     result = await redis_store.set(test_key, list_value, ttl=60)
     assert result is True
     retrieved = await redis_store.get(test_key)
-    assert retrieved == "[1, 2, 3, 'test']"
+    assert retrieved == list_value
 
     # Delete the key
     delete_result = await redis_store.delete(test_key)
