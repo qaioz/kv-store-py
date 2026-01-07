@@ -1,5 +1,6 @@
 from typing import Optional, Any
 import redis.asyncio as redis
+import json
 from .base import AbstractStore
 
 class RedisStore(AbstractStore):
@@ -7,32 +8,32 @@ class RedisStore(AbstractStore):
         self.client = client
 
     async def get(self, key: str, default: Optional[Any] = None) -> Optional[Any]:
-        key_type = await self.client.type(key)
-
-        if key_type == b'hash':
-            return await self.client.hgetall(key)
-        elif key_type == b'string':
-            return await self.client.get(key)
-        else:
+        value = await self.client.get(key)
+        if value is None:
             return default
 
-    async def set(self, key: str, value: Any, ttl: int) -> bool:
-        if isinstance(value, dict):
-            key_type = await self.client.type(key)
-            if key_type != b'hash' and key_type != b'none':
-                await self.client.delete(key)
-            await self.client.hset(key, mapping=value)
-            return await self.client.expire(key, ttl)
-        else:
-            key_type = await self.client.type(key)
-            if key_type != b'string' and key_type != b'none':
-                await self.client.delete(key)
-            return await self._set_non_dict(key, value, ttl)
+        # Try to deserialize if it's a JSON string
+        if isinstance(value, bytes):
+            value = value.decode('utf-8')
 
-    async def _set_non_dict(self, key: str, value: Any, ttl: int) -> bool:
-        if not isinstance(value, (str, bytes, int, float)):
+        try:
+            # Check if it looks like JSON (starts with '{' or '[')
+            if value.startswith(('{', '[')):
+                return json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+        return value
+
+    async def set(self, key: str, value: Any, ttl: int) -> bool:
+        # Serialize complex types to JSON
+        if isinstance(value, dict):
+            value = json.dumps(value)
+        elif not isinstance(value, (str, bytes, int, float)):
             value = str(value)
+
         return await self.client.set(key, value, ex=ttl)
+
 
     async def delete(self, key: str) -> bool:
         result = await self.client.delete(key)
@@ -43,68 +44,44 @@ class RedisStore(AbstractStore):
         if not keys:
             return {}
 
-        # Get types for all keys first
-        pipeline = self.client.pipeline()
-        for key in keys:
-            pipeline.type(key)
-
-        # Execute to get all key types
-        types_results = await pipeline.execute()
-
-        # Separate keys by type
-        string_keys = []
-        hash_keys = []
-        key_to_type = {}
-
-        for key, key_type in zip(keys, types_results):
-            key_to_type[key] = key_type
-            if key_type == b'string':
-                string_keys.append(key)
-            elif key_type == b'hash':
-                hash_keys.append(key)
+        # Get all values at once
+        values = await self.client.mget(keys)
 
         # Initialize results with defaults
         results = {key: default for key in keys}
 
-        # Batch get string values using MGET
-        if string_keys:
-            string_values = await self.client.mget(string_keys)
-            for key, value in zip(string_keys, string_values):
-                results[key] = value
+        # Process each value, attempting deserialization where appropriate
+        for key, value in zip(keys, values):
+            if value is not None:
+                # Try to deserialize if it's a JSON string
+                if isinstance(value, bytes):
+                    value = value.decode('utf-8')
 
-        # Batch get hash values using pipelined HGETALL
-        if hash_keys:
-            hash_pipeline = self.client.pipeline()
-            for key in hash_keys:
-                hash_pipeline.hgetall(key)
-            hash_results = await hash_pipeline.execute()
-
-            for key, hash_value in zip(hash_keys, hash_results):
-                results[key] = hash_value if hash_value else default
+                try:
+                    # Check if it looks like JSON (starts with '{' or '[')
+                    if value.startswith(('{', '[')):
+                        results[key] = json.loads(value)
+                    else:
+                        results[key] = value
+                except (json.JSONDecodeError, TypeError):
+                    results[key] = value
 
         return results
 
     async def set_many(self, items: dict[str, Any], ttl: int) -> dict[str, bool]:
         """Set multiple values in the store with TTL."""
-        results = {}
         pipeline = self.client.pipeline()
+        results = {}
 
         for key, value in items.items():
+            # Serialize complex types to JSON
             if isinstance(value, dict):
-                # Handle dict values with hset
-                key_type = await self.client.type(key)
-                if key_type != b'hash' and key_type != b'none':
-                    pipeline.delete(key)
-                pipeline.hset(key, mapping=value)
-                pipeline.expire(key, ttl)
-                results[key] = True  # We'll check this after execution
-            else:
-                # Handle simple values - convert to string if needed
-                if not isinstance(value, (str, bytes, int, float)):
-                    value = str(value)
-                # Use set command for each simple value with TTL
-                pipeline.set(key, value, ex=ttl)
-                results[key] = True
+                value = json.dumps(value)
+            elif not isinstance(value, (str, bytes, int, float)):
+                value = str(value)
+
+            pipeline.set(key, value, ex=ttl)
+            results[key] = True
 
         await pipeline.execute()
         return results

@@ -26,7 +26,7 @@ async def test_set_and_get_dict(redis_store):
     
     # Get the value
     retrieved = await redis_store.get(test_key)
-    assert retrieved == {b"name": b"John", b"age": b"30", b"city": b"NYC"}
+    assert retrieved == {"name": "John", "age": "30", "city": "NYC"}
 
 
 @pytest.mark.asyncio
@@ -42,7 +42,7 @@ async def test_set_and_get_string(redis_store):
     
     # Get the value
     retrieved = await redis_store.get(test_key)
-    assert retrieved == b"Hello World"  # Redis returns bytes for string values
+    assert retrieved == "Hello World"
 
 
 @pytest.mark.asyncio
@@ -58,7 +58,7 @@ async def test_overwrite_dict_with_string(redis_store):
 
     # Verify it's stored as dict
     retrieved = await redis_store.get(test_key)
-    assert retrieved == {b"name": b"John", b"age": b"30"}
+    assert retrieved == {"name": "John", "age": "30"}
 
     # Overwrite with string value
     result = await redis_store.set(test_key, string_value, ttl=60)
@@ -66,7 +66,7 @@ async def test_overwrite_dict_with_string(redis_store):
 
     # Get the value - should now be the string
     retrieved = await redis_store.get(test_key)
-    assert retrieved == b"Hello World"
+    assert retrieved == "Hello World"
 
 
 @pytest.mark.asyncio
@@ -82,7 +82,7 @@ async def test_overwrite_string_with_dict(redis_store):
 
     # Verify it's stored as string
     retrieved = await redis_store.get(test_key)
-    assert retrieved == b"Hello World"
+    assert retrieved == "Hello World"
 
     # Overwrite with dict value
     result = await redis_store.set(test_key, dict_value, ttl=60)
@@ -90,7 +90,7 @@ async def test_overwrite_string_with_dict(redis_store):
 
     # Get the value - should now be the dict
     retrieved = await redis_store.get(test_key)
-    assert retrieved == {b"message": b"Hello", b"count": b"1"}
+    assert retrieved == {"message": "Hello", "count": "1"}
 
 
 @pytest.mark.asyncio
@@ -106,7 +106,7 @@ async def test_expiration(redis_store):
 
     # Verify it's stored
     retrieved = await redis_store.get(test_key)
-    assert retrieved == b"This will expire"
+    assert retrieved == "This will expire"
 
     # Sleep for more than 1 second
     await asyncio.sleep(1.1)
@@ -126,7 +126,7 @@ async def test_set_get_delete_get_other_types(redis_store):
     result = await redis_store.set(test_key, int_value, ttl=60)
     assert result is True
     retrieved = await redis_store.get(test_key)
-    assert retrieved == b"42"  # Redis converts to bytes
+    assert retrieved == "42"
 
     # Delete the key
     delete_result = await redis_store.delete(test_key)
@@ -141,7 +141,7 @@ async def test_set_get_delete_get_other_types(redis_store):
     result = await redis_store.set(test_key, float_value, ttl=60)
     assert result is True
     retrieved = await redis_store.get(test_key)
-    assert retrieved == b"3.14159"  # Redis converts to bytes
+    assert retrieved == "3.14159"
 
     # Delete the key
     delete_result = await redis_store.delete(test_key)
@@ -156,7 +156,7 @@ async def test_set_get_delete_get_other_types(redis_store):
     result = await redis_store.set(test_key, list_value, ttl=60)
     assert result is True
     retrieved = await redis_store.get(test_key)
-    assert retrieved == b"[1, 2, 3, 'test']"  # Redis converts to bytes
+    assert retrieved == "[1, 2, 3, 'test']"
 
     # Delete the key
     delete_result = await redis_store.delete(test_key)
@@ -197,7 +197,7 @@ async def test_get_with_default_expired_key(redis_store):
 
     # Verify it's stored
     retrieved = await redis_store.get(test_key)
-    assert retrieved == b"This will expire"
+    assert retrieved == "This will expire"
 
     # Sleep for more than 1 second to let it expire
     await asyncio.sleep(1.1)
@@ -224,7 +224,7 @@ async def test_get_with_default_existing_key(redis_store):
 
     # Get the existing key with default - should return actual value, not default
     retrieved = await redis_store.get(test_key, default=default_value)
-    assert retrieved == b"Hello World"  # Redis returns bytes
+    assert retrieved == "Hello World"
     assert retrieved != default_value
 
 
@@ -254,8 +254,8 @@ async def test_get_many_mixed_keys(redis_store):
     results = await redis_store.get_many(keys)
 
     assert len(results) == 3
-    assert results[string_key] == b"Hello World"
-    assert results[dict_key] == {b"name": b"John", b"age": b"30"}
+    assert results[string_key] == "Hello World"
+    assert results[dict_key] == {"name": "John", "age": "30"}
     assert results[nonexistent_key] is None
 
 
@@ -272,7 +272,7 @@ async def test_get_many_with_default(redis_store):
     results = await redis_store.get_many(keys, default=default_value)
 
     assert len(results) == 2
-    assert results[existing_key] == b"existing value"
+    assert results[existing_key] == "existing value"
     assert results[nonexistent_key] == default_value
 
 
@@ -288,7 +288,7 @@ async def test_get_many_order_preservation(redis_store):
 
     # Get them back
     results = await redis_store.get_many(keys)
-    expected = {"key3": b"value3", "key1": b"value1", "key2": b"value2"}
+    expected = {"key3": "value3", "key1": "value1", "key2": "value2"}
 
     assert results == expected
 
@@ -303,7 +303,7 @@ async def test_get_many_only_string_keys(redis_store):
         await redis_store.set(key, value, ttl=60)
 
     results = await redis_store.get_many(keys)
-    expected = {"str1": b"val1", "str2": b"val2", "str3": b"val3"}
+    expected = {"str1": "val1", "str2": "val2", "str3": "val3"}
 
     assert results == expected
 
@@ -323,8 +323,8 @@ async def test_get_many_only_hash_keys(redis_store):
     results = await redis_store.get_many(keys)
 
     assert len(results) == 2
-    assert results["hash1"] == {b"a": b"1", b"b": b"2"}
-    assert results["hash2"] == {b"x": b"10", b"y": b"20"}
+    assert results["hash1"] == {"a": "1", "b": "2"}
+    assert results["hash2"] == {"x": "10", "y": "20"}
 
 
 @pytest.mark.asyncio
@@ -340,7 +340,7 @@ async def test_get_many_expired_keys(redis_store):
 
     # Verify they're set
     results = await redis_store.get_many([key1, key2])
-    assert results == {key1: b"value1", key2: b"value2"}
+    assert results == {key1: "value1", key2: "value2"}
 
     # Wait for expiration
     await asyncio.sleep(1.1)
@@ -366,7 +366,7 @@ async def test_get_many_different_default_types(redis_store):
 
     # Test with string default
     results = await redis_store.get_many(keys, default="string_default")
-    assert results[existing_key] == b"exists"
+    assert results[existing_key] == "exists"
     assert all(results[k] == "string_default" for k in nonexistent_keys)
 
     # Test with dict default
