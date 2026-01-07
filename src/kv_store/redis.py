@@ -38,10 +38,10 @@ class RedisStore(AbstractStore):
         result = await self.client.delete(key)
         return result > 0
 
-    async def get_many(self, keys: list[str], default: Optional[Any] = None) -> list[Optional[Any]]:
+    async def get_many(self, keys: list[str], default: Optional[Any] = None) -> dict[str, Optional[Any]]:
         """Get multiple values from the store."""
         if not keys:
-            return []
+            return {}
 
         # Get types for all keys first
         pipeline = self.client.pipeline()
@@ -51,26 +51,26 @@ class RedisStore(AbstractStore):
         # Execute to get all key types
         types_results = await pipeline.execute()
 
-        # Separate keys by type and track their positions
+        # Separate keys by type
         string_keys = []
         hash_keys = []
-        key_to_index = {}
+        key_to_type = {}
 
-        for i, (key, key_type) in enumerate(zip(keys, types_results)):
-            key_to_index[key] = i
+        for key, key_type in zip(keys, types_results):
+            key_to_type[key] = key_type
             if key_type == b'string':
                 string_keys.append(key)
             elif key_type == b'hash':
                 hash_keys.append(key)
 
         # Initialize results with defaults
-        results = [default] * len(keys)
+        results = {key: default for key in keys}
 
         # Batch get string values using MGET
         if string_keys:
             string_values = await self.client.mget(string_keys)
             for key, value in zip(string_keys, string_values):
-                results[key_to_index[key]] = value
+                results[key] = value
 
         # Batch get hash values using pipelined HGETALL
         if hash_keys:
@@ -80,13 +80,13 @@ class RedisStore(AbstractStore):
             hash_results = await hash_pipeline.execute()
 
             for key, hash_value in zip(hash_keys, hash_results):
-                results[key_to_index[key]] = hash_value if hash_value else default
+                results[key] = hash_value if hash_value else default
 
         return results
 
-    async def set_many(self, items: dict[str, Any], ttl: int) -> list[bool]:
+    async def set_many(self, items: dict[str, Any], ttl: int) -> dict[str, bool]:
         """Set multiple values in the store with TTL."""
-        results = []
+        results = {}
         pipeline = self.client.pipeline()
 
         for key, value in items.items():
@@ -97,14 +97,14 @@ class RedisStore(AbstractStore):
                     pipeline.delete(key)
                 pipeline.hset(key, mapping=value)
                 pipeline.expire(key, ttl)
-                results.append(True)  # We'll check this after execution
+                results[key] = True  # We'll check this after execution
             else:
                 # Handle simple values - convert to string if needed
                 if not isinstance(value, (str, bytes, int, float)):
                     value = str(value)
                 # Use set command for each simple value with TTL
                 pipeline.set(key, value, ex=ttl)
-                results.append(True)
+                results[key] = True
 
         await pipeline.execute()
         return results

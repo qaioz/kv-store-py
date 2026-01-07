@@ -268,9 +268,9 @@ async def test_get_with_default_existing_key(memory_store):
 
 @pytest.mark.asyncio
 async def test_get_many_empty_list(memory_store):
-    """Test get_many with empty list returns empty list."""
+    """Test get_many with empty list returns empty dict."""
     result = await memory_store.get_many([])
-    assert result == []
+    assert result == {}
 
 
 @pytest.mark.asyncio
@@ -292,9 +292,9 @@ async def test_get_many_mixed_keys(memory_store):
     results = await memory_store.get_many(keys)
 
     assert len(results) == 3
-    assert results[0] == string_value
-    assert results[1] == dict_value
-    assert results[2] is None
+    assert results[string_key] == string_value
+    assert results[dict_key] == dict_value
+    assert results[nonexistent_key] is None
 
 
 @pytest.mark.asyncio
@@ -310,13 +310,13 @@ async def test_get_many_with_default(memory_store):
     results = await memory_store.get_many(keys, default=default_value)
 
     assert len(results) == 2
-    assert results[0] == "existing value"
-    assert results[1] == default_value
+    assert results[existing_key] == "existing value"
+    assert results[nonexistent_key] == default_value
 
 
 @pytest.mark.asyncio
 async def test_get_many_order_preservation(memory_store):
-    """Test that get_many preserves order of keys."""
+    """Test that get_many returns values for the correct keys."""
     keys = ["key3", "key1", "key2"]
     values = ["value3", "value1", "value2"]
 
@@ -324,9 +324,9 @@ async def test_get_many_order_preservation(memory_store):
     for key, value in zip(keys, values):
         await memory_store.set(key, value, ttl=60)
 
-    # Get them back in same order
+    # Get them back
     results = await memory_store.get_many(keys)
-    expected = ["value3", "value1", "value2"]
+    expected = {"key3": "value3", "key1": "value1", "key2": "value2"}
 
     assert results == expected
 
@@ -341,7 +341,7 @@ async def test_get_many_only_string_keys(memory_store):
         await memory_store.set(key, value, ttl=60)
 
     results = await memory_store.get_many(keys)
-    expected = ["val1", "val2", "val3"]
+    expected = {"str1": "val1", "str2": "val2", "str3": "val3"}
 
     assert results == expected
 
@@ -361,8 +361,8 @@ async def test_get_many_only_hash_keys(memory_store):
     results = await memory_store.get_many(keys)
 
     assert len(results) == 2
-    assert results[0] == {"a": "1", "b": "2"}
-    assert results[1] == {"x": "10", "y": "20"}
+    assert results["hash1"] == {"a": "1", "b": "2"}
+    assert results["hash2"] == {"x": "10", "y": "20"}
 
 
 @pytest.mark.asyncio
@@ -378,18 +378,18 @@ async def test_get_many_expired_keys(memory_store):
 
     # Verify they're set
     results = await memory_store.get_many([key1, key2])
-    assert results == ["value1", "value2"]
+    assert results == {key1: "value1", key2: "value2"}
 
     # Wait for expiration
     await asyncio.sleep(1.1)
 
     # Get expired keys with default
     results = await memory_store.get_many([key1, key2], default="expired_default")
-    assert results == ["expired_default", "expired_default"]
+    assert results == {key1: "expired_default", key2: "expired_default"}
 
     # Get expired keys without default
     results = await memory_store.get_many([key1, key2])
-    assert results == [None, None]
+    assert results == {key1: None, key2: None}
 
 
 @pytest.mark.asyncio
@@ -404,16 +404,16 @@ async def test_get_many_different_default_types(memory_store):
 
     # Test with string default
     results = await memory_store.get_many(keys, default="string_default")
-    assert results[0] == "exists"
-    assert all(r == "string_default" for r in results[1:])
+    assert results[existing_key] == "exists"
+    assert all(results[k] == "string_default" for k in nonexistent_keys)
 
     # Test with dict default
     results = await memory_store.get_many(nonexistent_keys, default={"key": "value"})
-    assert all(r == {"key": "value"} for r in results)
+    assert all(results[k] == {"key": "value"} for k in nonexistent_keys)
 
     # Test with None default
     results = await memory_store.get_many(nonexistent_keys, default=None)
-    assert all(r is None for r in results)
+    assert all(results[k] is None for k in nonexistent_keys)
 
 
 @pytest.mark.asyncio
@@ -429,19 +429,19 @@ async def test_get_many_mixed_types(memory_store):
     results = await memory_store.get_many(keys)
 
     assert len(results) == 6
-    assert results[0] == "string"
-    assert results[1] == {"key": "value"}
-    assert results[2] == [1, 2, 3]
-    assert results[3] == 42
-    assert results[4] == 3.14
-    assert results[5] is None  # missing key
+    assert results["str"] == "string"
+    assert results["dict"] == {"key": "value"}
+    assert results["list"] == [1, 2, 3]
+    assert results["int"] == 42
+    assert results["float"] == 3.14
+    assert results["missing"] is None  # missing key
 
 
 @pytest.mark.asyncio
 async def test_set_many_empty_dict(memory_store):
     """Test set_many with empty dictionary."""
     result = await memory_store.set_many({}, ttl=60)
-    assert result == []
+    assert result == {}
 
 
 @pytest.mark.asyncio
@@ -458,7 +458,7 @@ async def test_set_many_mixed_types(memory_store):
     results = await memory_store.set_many(items, ttl=60)
 
     # All operations should succeed
-    assert all(results)
+    assert all(results.values())
     assert len(results) == 5
 
     # Verify values were stored correctly
@@ -482,7 +482,7 @@ async def test_set_many_with_ttl(memory_store):
     results = await memory_store.set_many(items, ttl=1)
 
     # All operations should succeed
-    assert all(results)
+    assert all(results.values())
 
     # Verify values are set
     assert await memory_store.get("key1") == "value1"
@@ -507,7 +507,7 @@ async def test_set_many_zero_ttl(memory_store):
     results = await memory_store.set_many(items, ttl=0)
 
     # All operations should succeed
-    assert all(results)
+    assert all(results.values())
 
     # Verify values persist
     assert await memory_store.get("key1") == "value1"
@@ -538,7 +538,7 @@ async def test_set_many_overwrite_existing(memory_store):
     results = await memory_store.set_many(items, ttl=60)
 
     # All operations should succeed
-    assert all(results)
+    assert all(results.values())
     assert len(results) == 3
 
     # Verify values were overwritten
@@ -549,7 +549,7 @@ async def test_set_many_overwrite_existing(memory_store):
 
 @pytest.mark.asyncio
 async def test_set_many_return_values(memory_store):
-    """Test that set_many returns correct boolean list."""
+    """Test that set_many returns correct boolean dict."""
     items = {
         "key1": "value1",
         "key2": "value2",
@@ -558,6 +558,6 @@ async def test_set_many_return_values(memory_store):
 
     results = await memory_store.set_many(items, ttl=60)
 
-    # Should return list of True values, one for each item
-    assert results == [True, True, True]
+    # Should return dict of True values, one for each item
+    assert results == {"key1": True, "key2": True, "key3": True}
     assert len(results) == len(items)
