@@ -1,7 +1,9 @@
 from src.kv_store import RedisStore
 from redis.asyncio import Redis
+import redis
 import pytest
 import pytest_asyncio
+import asyncio
 
 @pytest_asyncio.fixture
 async def redis_client():
@@ -378,3 +380,84 @@ async def test_get_many_different_default_types(redis_store):
     assert all(results[k] is None for k in nonexistent_keys)
 
 
+@pytest.mark.asyncio
+async def test_lock_acquire_and_release(redis_store):
+    """Test that the context manager acquires and releases the lock."""
+    lock_name = "test:lock:basic"
+    
+    # 1. Ensure lock key doesn't exist yet
+    assert await redis_store.client.get(lock_name) is None
+
+    # 2. Acquire lock
+    async with redis_store.lock(lock_name):
+        # Verify lock key exists in Redis while inside the block
+        # (Redis locks usually store a UUID-like string)
+        lock_value = await redis_store.client.get(lock_name)
+        assert lock_value is not None
+    
+    # 3. Verify lock key is gone after exiting block
+    assert await redis_store.client.get(lock_name) is None
+
+
+@pytest.mark.asyncio
+async def test_lock_mutual_exclusion(redis_store):
+    """Test that two locks on the same name cannot be held simultaneously."""
+    lock_name = "test:lock:exclusion"
+
+    async with redis_store.lock(lock_name):
+        # While holding the lock, try to acquire it again with a different instance
+        # We set blocking_timeout=0.1 so it fails fast
+        with pytest.raises(redis.exceptions.LockError):
+            async with redis_store.lock(lock_name, blocking_timeout=0.1):
+                pass
+
+
+@pytest.mark.asyncio
+async def test_lock_blocking_timeout_failure(redis_store):
+    """Test that acquiring a lock fails if the timeout is exceeded."""
+    lock_name = "test:lock:timeout"
+
+    # Create a background task that holds the lock for 2 seconds
+    async def hold_lock_task():
+        async with redis_store.lock(lock_name):
+            await asyncio.sleep(2)
+
+    # Start the background task
+    task = asyncio.create_task(hold_lock_task())
+    
+    # Give the task a moment to acquire the lock
+    await asyncio.sleep(0.1)
+
+    # Try to acquire the lock with a 0.5s timeout (should fail because task holds it for 2s)
+    try:
+        with pytest.raises(redis.exceptions.LockError):
+            async with redis_store.lock(lock_name, blocking_timeout=0.5):
+                pass
+    finally:
+        await task  # Clean up
+
+
+@pytest.mark.asyncio
+async def test_lock_blocking_timeout_success(redis_store):
+    """Test that we successfully acquire the lock after waiting for it to free up."""
+    lock_name = "test:lock:wait"
+
+    # Create a background task that holds the lock for only 0.5 seconds
+    async def hold_lock_task():
+        async with redis_store.lock(lock_name):
+            await asyncio.sleep(0.5)
+
+    # Start the background task
+    task = asyncio.create_task(hold_lock_task())
+    
+    # Give the task a moment to acquire the lock
+    await asyncio.sleep(0.1)
+
+    # Try to acquire the lock with a 2.0s timeout.
+    # Since the other task releases it in 0.5s, this should succeed.
+    try:
+        async with redis_store.lock(lock_name, blocking_timeout=2.0):
+            # If we reached here, we successfully waited and acquired the lock
+            assert True
+    finally:
+        await task
