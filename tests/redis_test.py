@@ -461,3 +461,31 @@ async def test_lock_blocking_timeout_success(redis_store):
             assert True
     finally:
         await task
+
+
+@pytest.mark.asyncio
+async def test_delete_many_mixed(redis_store):
+    """Test deleting multiple keys, some existing, some not."""
+    # Set up keys
+    await redis_store.set("del:1", "val1", ttl=60)
+    await redis_store.set("del:2", "val2", ttl=60)
+    await redis_store.set("del:3", "val3", ttl=60)
+
+    # Delete 2 existing keys and 1 non-existent key
+    keys_to_delete = ["del:1", "del:2", "del:nonexistent"]
+    count = await redis_store.delete_many(keys_to_delete)
+
+    # Should return 2 (number of keys actually deleted)
+    assert count == 2
+
+    # Verify deleted keys are gone
+    assert await redis_store.get("del:1") is None
+    assert await redis_store.get("del:2") is None
+    
+    # Verify untouched key remains
+    assert await redis_store.get("del:3") == "val3"
+
+@pytest.mark.asyncio
+async def test_delete_many_empty(redis_store):
+    """Test delete_many with empty list."""
+    assert await redis_store.delete_many([]) == 0

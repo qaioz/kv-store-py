@@ -83,3 +83,9 @@ class RedisStore(AbstractStore):
         :param blocking_timeout: How long to wait to acquire the lock. None waits forever.
         """
         return self.client.lock(name=name, timeout=timeout, blocking_timeout=blocking_timeout)
+
+
+    async def delete_many(self, keys: list[str]) -> int:
+        if not keys:
+            return 0
+        return await self.client.delete(*keys)

@@ -55,3 +55,12 @@ class InMemoryStore(AbstractStore):
             results[key] = result
 
         return results
+
+    async def delete_many(self, keys: list[str]) -> int:
+        """Delete multiple values from the store."""
+        count = 0
+        for key in keys:
+            if key in self._store:
+                del self._store[key]
+                count += 1
+        return count

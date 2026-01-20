@@ -29,3 +29,8 @@ class AbstractStore(ABC):
         """Set multiple values in the store with TTL."""
         pass
 
+    @abstractmethod
+    async def delete_many(self, keys: list[str]) -> int:
+        """Delete multiple values from the store. Returns count of deleted items."""
+        pass
+
