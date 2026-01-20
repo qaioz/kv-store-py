@@ -37,7 +37,9 @@ class InMemoryStore(AbstractStore):
             return True
         return False
 
-    async def get_many(self, keys: list[str], default: Optional[Any] = None) -> dict[str, Optional[Any]]:
+    async def get_many(
+        self, keys: list[str], default: Optional[Any] = None
+    ) -> dict[str, Optional[Any]]:
         """Get multiple values from the store."""
         if not keys:
             return {}

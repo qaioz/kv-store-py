@@ -1,15 +1,12 @@
-import pytest
-import pytest_asyncio
-from redis.asyncio import Redis
-
-from src.kv_store import RedisStore
-
-from src.kv_store import RedisStore
-from redis.asyncio import Redis
-import redis
-import pytest
-import pytest_asyncio
 import asyncio
+
+import pytest
+import pytest_asyncio
+import redis
+from redis.asyncio import Redis
+
+from src.kv_store import RedisStore
+
 
 @pytest_asyncio.fixture
 async def redis_client():
@@ -188,7 +185,9 @@ async def test_get_with_default_nonexistent_key(redis_store):
 
     # Test with different default types
     assert await redis_store.get("another:nonexistent", default=42) == 42
-    assert await redis_store.get("third:nonexistent", default={"key": "value"}) == {"key": "value"}
+    assert await redis_store.get("third:nonexistent", default={"key": "value"}) == {
+        "key": "value"
+    }
     assert await redis_store.get("fourth:nonexistent", default=None) is None
 
 
@@ -196,6 +195,7 @@ async def test_get_with_default_nonexistent_key(redis_store):
 async def test_get_with_default_expired_key(redis_store):
     """Test getting an expired key with a default value."""
     import asyncio
+
     test_key = "test:expired:default:key"
     test_value = "This will expire"
     default_value = "default_after_expiry"
@@ -321,10 +321,7 @@ async def test_get_many_only_string_keys(redis_store):
 async def test_get_many_only_hash_keys(redis_store):
     """Test get_many with only hash/dict keys."""
     keys = ["hash1", "hash2"]
-    values = [
-        {"a": "1", "b": "2"},
-        {"x": "10", "y": "20"}
-    ]
+    values = [{"a": "1", "b": "2"}, {"x": "10", "y": "20"}]
 
     for key, value in zip(keys, values):
         await redis_store.set(key, value, ttl=60)
@@ -391,7 +388,7 @@ async def test_get_many_different_default_types(redis_store):
 async def test_lock_acquire_and_release(redis_store):
     """Test that the context manager acquires and releases the lock."""
     lock_name = "test:lock:basic"
-    
+
     # 1. Ensure lock key doesn't exist yet
     assert await redis_store.client.get(lock_name) is None
 
@@ -401,7 +398,7 @@ async def test_lock_acquire_and_release(redis_store):
         # (Redis locks usually store a UUID-like string)
         lock_value = await redis_store.client.get(lock_name)
         assert lock_value is not None
-    
+
     # 3. Verify lock key is gone after exiting block
     assert await redis_store.client.get(lock_name) is None
 
@@ -431,7 +428,7 @@ async def test_lock_blocking_timeout_failure(redis_store):
 
     # Start the background task
     task = asyncio.create_task(hold_lock_task())
-    
+
     # Give the task a moment to acquire the lock
     await asyncio.sleep(0.1)
 
@@ -456,7 +453,7 @@ async def test_lock_blocking_timeout_success(redis_store):
 
     # Start the background task
     task = asyncio.create_task(hold_lock_task())
-    
+
     # Give the task a moment to acquire the lock
     await asyncio.sleep(0.1)
 
@@ -488,9 +485,10 @@ async def test_delete_many_mixed(redis_store):
     # Verify deleted keys are gone
     assert await redis_store.get("del:1") is None
     assert await redis_store.get("del:2") is None
-    
+
     # Verify untouched key remains
     assert await redis_store.get("del:3") == "val3"
+
 
 @pytest.mark.asyncio
 async def test_delete_many_empty(redis_store):

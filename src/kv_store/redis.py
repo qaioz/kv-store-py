@@ -1,8 +1,9 @@
+import json
 from typing import Any, Optional
 
 import redis.asyncio as redis
 from redis.asyncio.lock import Lock
-import json
+
 from .base import AbstractStore
 
 
@@ -26,7 +27,7 @@ class RedisStore(AbstractStore):
             return None
 
         if isinstance(value, bytes):
-            value = value.decode('utf-8')
+            value = value.decode("utf-8")
 
         try:
             return json.loads(value)
@@ -47,10 +48,12 @@ class RedisStore(AbstractStore):
         result = await self.client.delete(key)
         return result > 0
 
-    async def get_many(self, keys: list[str], default: Optional[Any] = None) -> dict[str, Optional[Any]]:
+    async def get_many(
+        self, keys: list[str], default: Optional[Any] = None
+    ) -> dict[str, Optional[Any]]:
         if not keys:
             return {}
-        
+
         values = await self.client.mget(keys)
         results = {}
 
@@ -76,16 +79,19 @@ class RedisStore(AbstractStore):
         await pipeline.execute()
         return results
 
-    def lock(self, name: str, timeout: float = 30.0, blocking_timeout: Optional[float] = None) -> Lock:
+    def lock(
+        self, name: str, timeout: float = 30.0, blocking_timeout: Optional[float] = None
+    ) -> Lock:
         """
         Returns an Async Redis Lock object to be used with `async with`.
-        
+
         :param name: The key name for the lock (e.g., 'lock:my_resource').
         :param timeout: Maximum lifespan of the lock in seconds (prevents deadlocks if app crashes).
         :param blocking_timeout: How long to wait to acquire the lock. None waits forever.
         """
-        return self.client.lock(name=name, timeout=timeout, blocking_timeout=blocking_timeout)
-
+        return self.client.lock(
+            name=name, timeout=timeout, blocking_timeout=blocking_timeout
+        )
 
     async def delete_many(self, keys: list[str]) -> int:
         if not keys:

@@ -1,6 +1,7 @@
 # tests/settings.py
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class TestSettings(BaseSettings):
     docker_compose_file: str = "docker-compose.tests.yml"
     redis_host: str

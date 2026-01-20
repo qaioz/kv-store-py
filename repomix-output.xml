@@ -40,6 +40,9 @@ The content is organized as follows:
 </file_summary>
 
 <directory_structure>
+.github/
+  workflows/
+    ci.yml
 src/
   kv_store/
     __init__.py
@@ -48,11 +51,16 @@ src/
     redis.py
 tests/
   __init__.py
+  conftest.py
   memory_test.py
   redis_test.py
+  settings.py
 __init__.py
+.flake8
 .gitignore
+docker-compose.tests.yml
 LICENSE
+Makefile
 pyproject.toml
 README.md
 </directory_structure>
@@ -60,28 +68,90 @@ README.md
 <files>
 This section contains the contents of the repository's files.
 
-<file path="src/kv_store/__init__.py">
-from .base import AbstractStore
-from .memory import InMemoryStore
-
-# We try to import RedisStore, but if the user didn't install redis,
-# we don't crash the whole app—we just make RedisStore unavailable.
-try:
-    from .redis import RedisStore
-except ImportError:
-    RedisStore = None
-
-__all__ = ["AbstractStore", "InMemoryStore", "RedisStore"]
-</file>
-
 <file path="tests/__init__.py">
 
 </file>
 
-<file path="__init__.py">
-from src.kv_store import AbstractStore, RedisStore, InMemoryStore
+<file path="tests/conftest.py">
+import pytest
+import pytest_asyncio
+from redis.asyncio import Redis
+from src.kv_store import RedisStore
+from tests.settings import test_settings
 
-__all__ = ["AbstractStore", "RedisStore", "InMemoryStore"]
+
+@pytest_asyncio.fixture(scope="session")
+async def redis_client():
+    """Create a Redis client once per test session."""
+    client = Redis(
+        host=test_settings.redis_host,
+        port=test_settings.redis_port,
+        db=0,
+        password=test_settings.redis_password,
+        decode_responses=False,
+    )
+
+    try:
+        await client.ping()
+    except Exception as e:
+        pytest.fail(f"Could not connect to Redis: {e}")
+
+    yield client
+
+    await client.aclose()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def redis_store(redis_client):
+    """Returns an instance of RedisStore, cleared after each test."""
+    yield RedisStore(redis_client)
+    await redis_client.flushdb()
+</file>
+
+<file path="tests/settings.py">
+# tests/settings.py
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+class TestSettings(BaseSettings):
+    docker_compose_file: str = "docker-compose.tests.yml"
+    redis_host: str
+    redis_port: int
+    redis_password: str
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+
+test_settings = TestSettings()
+</file>
+
+<file path=".flake8">
+[flake8]
+max-line-length = 88
+extend-ignore = E203,W503,E501
+exclude =
+    .git,
+    __pycache__,
+    build,
+    dist,
+    .eggs,
+    .tox,
+    .venv
+</file>
+
+<file path="docker-compose.tests.yml">
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      # Maps Host Port (from env) to Container Port (6379)
+      - "${REDIS_PORT:-6379}:6379"
+    # Passes the password from env to the redis startup command
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 3
 </file>
 
 <file path="LICENSE">
@@ -106,6 +176,76 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+</file>
+
+<file path="src/kv_store/__init__.py">
+from .base import AbstractStore
+from .memory import InMemoryStore
+
+# We try to import RedisStore, but if the user didn't install redis,
+# we don't crash the whole app—we just make RedisStore unavailable.
+try:
+    from .redis import RedisStore
+except ImportError:
+    RedisStore = None
+
+__all__ = ["AbstractStore", "InMemoryStore", "RedisStore"]
+</file>
+
+<file path="__init__.py">
+from src.kv_store import AbstractStore, InMemoryStore, RedisStore
+
+__all__ = ["AbstractStore", "RedisStore", "InMemoryStore"]
+</file>
+
+<file path="README.md">
+# kv-store
+
+A simple wrapper for key-value stores supporting Python dict, Redis, Valkey, Memcached, and SQLite and other backend clients.
+</file>
+
+<file path=".github/workflows/ci.yml">
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v4
+      with:
+        version: "latest"
+
+    - name: Install dependencies
+      run: |
+        uv sync --group dev
+
+    - name: Run checks
+      run: |
+        uv run black --check .
+        uv run isort --check-only .
+        uv run flake8 .
+
+    - name: Run tests
+      run: |
+        uv run pytest
 </file>
 
 <file path=".gitignore">
@@ -240,17 +380,38 @@ dmypy.json
 ehthumbs.db
 Thumbs.db
 .pypirc
+*repomix*
 </file>
 
-<file path="README.md">
-# kv-store
+<file path="Makefile">
+.PHONY: install test lint format check clean
 
-A simple wrapper for key-value stores supporting Python dict, Redis, Valkey, Memcached, and SQLite and other backend clients.
+install:
+	uv sync --group dev
+
+test:
+	uv run pytest
+
+lint:
+	uv run flake8 .
+
+format:
+	uv run black .
+	uv run isort .
+
+check: format lint test
+
+clean:
+	find . -type f -name "*.pyc" -delete
+	find . -type d -name "__pycache__" -delete
+	rm -rf .pytest_cache
+	rm -rf .coverage
 </file>
 
 <file path="src/kv_store/base.py">
 from abc import ABC, abstractmethod
-from typing import Optional, Any
+from typing import Any, Optional
+
 
 class AbstractStore(ABC):
     """Abstract base class for key-value stores (Async)."""
@@ -279,12 +440,19 @@ class AbstractStore(ABC):
     async def set_many(self, items: dict[str, Any], ttl: int) -> dict[str, bool]:
         """Set multiple values in the store with TTL."""
         pass
+
+    @abstractmethod
+    async def delete_many(self, keys: list[str]) -> int:
+        """Delete multiple values from the store. Returns count of deleted items."""
+        pass
 </file>
 
 <file path="src/kv_store/memory.py">
 from time import time
-from typing import Optional, Any
+from typing import Any, Optional
+
 from .base import AbstractStore
+
 
 class InMemoryStore(AbstractStore):
     """
@@ -339,12 +507,22 @@ class InMemoryStore(AbstractStore):
             results[key] = result
 
         return results
+
+    async def delete_many(self, keys: list[str]) -> int:
+        """Delete multiple values from the store."""
+        count = 0
+        for key in keys:
+            if key in self._store:
+                del self._store[key]
+                count += 1
+        return count
 </file>
 
 <file path="tests/memory_test.py">
-from src.kv_store import InMemoryStore
 import pytest
 import pytest_asyncio
+
+from src.kv_store import InMemoryStore
 
 
 @pytest_asyncio.fixture
@@ -434,6 +612,7 @@ async def test_overwrite_string_with_dict(memory_store):
 async def test_expiration(memory_store):
     """Test that keys expire after TTL."""
     import asyncio
+
     test_key = "test:expire:key"
     test_value = "This will expire"
 
@@ -476,6 +655,7 @@ async def test_set_with_zero_ttl(memory_store):
 
     # Sleep for a bit and check again
     import asyncio
+
     await asyncio.sleep(0.1)
 
     retrieved = await memory_store.get(test_key)
@@ -905,6 +1085,34 @@ async def test_set_many_return_values(memory_store):
     # Should return dict of True values, one for each item
     assert results == {"key1": True, "key2": True, "key3": True}
     assert len(results) == len(items)
+
+
+@pytest.mark.asyncio
+async def test_delete_many_mixed(memory_store):
+    """Test deleting multiple keys, some existing, some not."""
+    # Set up keys
+    await memory_store.set("del:1", "val1", ttl=60)
+    await memory_store.set("del:2", "val2", ttl=60)
+    await memory_store.set("del:3", "val3", ttl=60)
+
+    # Delete 2 existing keys and 1 non-existent key
+    keys_to_delete = ["del:1", "del:2", "del:nonexistent"]
+    count = await memory_store.delete_many(keys_to_delete)
+
+    # Should return 2 (number of keys actually deleted)
+    assert count == 2
+
+    # Verify deleted keys are gone
+    assert await memory_store.get("del:1") is None
+    assert await memory_store.get("del:2") is None
+    
+    # Verify untouched key remains
+    assert await memory_store.get("del:3") == "val3"
+
+@pytest.mark.asyncio
+async def test_delete_many_empty(memory_store):
+    """Test delete_many with empty list."""
+    assert await memory_store.delete_many([]) == 0
 </file>
 
 <file path="pyproject.toml">
@@ -944,21 +1152,76 @@ classifiers = [
 ]
 
 dependencies = [
-    "pytest>=9.0.2",
-    "pytest-asyncio>=1.3.0",
+    "pydantic-settings>=2.12.0",
     "redis>=7.1.0",
 ]
 
 [project.urls]
 "Homepage" = "https://github.com/qaioz/kv-store"
+
+[dependency-groups]
+dev = [
+    "black>=25.12.0",
+    "flake8>=7.3.0",
+    "isort>=7.0.0",
+    "pydantic-settings>=2.12.0",
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
+    "python-dotenv>=1.2.1",
+]
+
+
+[tool.black]
+line-length = 88
+target-version = ['py310']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+
+[tool.isort]
+profile = "black"
+line_length = 88
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = ["E203", "W503", "E501"]
+exclude = [
+    ".git",
+    "__pycache__",
+    "build",
+    "dist",
+    ".eggs",
+    ".tox",
+    ".venv"
+]
 </file>
 
 <file path="src/kv_store/redis.py">
-from typing import Optional, Any
+from typing import Any, Optional
+
 import redis.asyncio as redis
 from redis.asyncio.lock import Lock
 import json
 from .base import AbstractStore
+
 
 class RedisStore(AbstractStore):
     def __init__(self, client: redis.Redis):
@@ -1039,9 +1302,21 @@ class RedisStore(AbstractStore):
         :param blocking_timeout: How long to wait to acquire the lock. None waits forever.
         """
         return self.client.lock(name=name, timeout=timeout, blocking_timeout=blocking_timeout)
+
+
+    async def delete_many(self, keys: list[str]) -> int:
+        if not keys:
+            return 0
+        return await self.client.delete(*keys)
 </file>
 
 <file path="tests/redis_test.py">
+import pytest
+import pytest_asyncio
+from redis.asyncio import Redis
+
+from src.kv_store import RedisStore
+
 from src.kv_store import RedisStore
 from redis.asyncio import Redis
 import redis
@@ -1051,9 +1326,10 @@ import asyncio
 
 @pytest_asyncio.fixture
 async def redis_client():
-    client = Redis(host="localhost", port=6379, db=0, password='grunge38')
+    client = Redis(host="localhost", port=6379, db=0, password="grunge38")
     yield client
     await client.aclose()
+
 
 @pytest_asyncio.fixture
 async def redis_store(redis_client):
@@ -1065,11 +1341,11 @@ async def test_set_and_get_dict(redis_store):
     """Test setting and getting a dictionary value."""
     test_key = "test:dict:key"
     test_value = {"name": "John", "age": "30", "city": "NYC"}
-    
+
     # Set the value
     result = await redis_store.set(test_key, test_value, ttl=60)
     assert result is True
-    
+
     # Get the value
     retrieved = await redis_store.get(test_key)
     assert retrieved == {"name": "John", "age": "30", "city": "NYC"}
@@ -1080,12 +1356,11 @@ async def test_set_and_get_string(redis_store):
     """Test setting and getting a string value."""
     test_key = "test:string:key"
     test_value = "Hello World"
-    
+
     # Set the value
     result = await redis_store.set(test_key, test_value, ttl=1)
     assert result is True
 
-    
     # Get the value
     retrieved = await redis_store.get(test_key)
     assert retrieved == "Hello World"
@@ -1143,6 +1418,7 @@ async def test_overwrite_string_with_dict(redis_store):
 async def test_expiration(redis_store):
     """Test that keys expire after TTL."""
     import asyncio
+
     test_key = "test:expire:key"
     test_value = "This will expire"
 
@@ -1505,6 +1781,34 @@ async def test_lock_blocking_timeout_success(redis_store):
             assert True
     finally:
         await task
+
+
+@pytest.mark.asyncio
+async def test_delete_many_mixed(redis_store):
+    """Test deleting multiple keys, some existing, some not."""
+    # Set up keys
+    await redis_store.set("del:1", "val1", ttl=60)
+    await redis_store.set("del:2", "val2", ttl=60)
+    await redis_store.set("del:3", "val3", ttl=60)
+
+    # Delete 2 existing keys and 1 non-existent key
+    keys_to_delete = ["del:1", "del:2", "del:nonexistent"]
+    count = await redis_store.delete_many(keys_to_delete)
+
+    # Should return 2 (number of keys actually deleted)
+    assert count == 2
+
+    # Verify deleted keys are gone
+    assert await redis_store.get("del:1") is None
+    assert await redis_store.get("del:2") is None
+    
+    # Verify untouched key remains
+    assert await redis_store.get("del:3") == "val3"
+
+@pytest.mark.asyncio
+async def test_delete_many_empty(redis_store):
+    """Test delete_many with empty list."""
+    assert await redis_store.delete_many([]) == 0
 </file>
 
 </files>

@@ -220,7 +220,9 @@ async def test_get_with_default_nonexistent_key(memory_store):
 
     # Test with different default types
     assert await memory_store.get("another:nonexistent", default=42) == 42
-    assert await memory_store.get("third:nonexistent", default={"key": "value"}) == {"key": "value"}
+    assert await memory_store.get("third:nonexistent", default={"key": "value"}) == {
+        "key": "value"
+    }
     assert await memory_store.get("fourth:nonexistent", default=None) is None
 
 
@@ -228,6 +230,7 @@ async def test_get_with_default_nonexistent_key(memory_store):
 async def test_get_with_default_expired_key(memory_store):
     """Test getting an expired key with a default value."""
     import asyncio
+
     test_key = "test:expired:default:key"
     test_value = "This will expire"
     default_value = "default_after_expiry"
@@ -353,10 +356,7 @@ async def test_get_many_only_string_keys(memory_store):
 async def test_get_many_only_hash_keys(memory_store):
     """Test get_many with only hash/dict keys."""
     keys = ["hash1", "hash2"]
-    values = [
-        {"a": "1", "b": "2"},
-        {"x": "10", "y": "20"}
-    ]
+    values = [{"a": "1", "b": "2"}, {"x": "10", "y": "20"}]
 
     for key, value in zip(keys, values):
         await memory_store.set(key, value, ttl=60)
@@ -455,7 +455,7 @@ async def test_set_many_mixed_types(memory_store):
         "dict_key": {"name": "John", "age": 30},
         "list_key": [1, 2, 3, "test"],
         "int_key": 42,
-        "float_key": 3.14159
+        "float_key": 3.14159,
     }
 
     results = await memory_store.set_many(items, ttl=60)
@@ -477,10 +477,7 @@ async def test_set_many_with_ttl(memory_store):
     """Test set_many with TTL expiration."""
     import asyncio
 
-    items = {
-        "key1": "value1",
-        "key2": "value2"
-    }
+    items = {"key1": "value1", "key2": "value2"}
 
     results = await memory_store.set_many(items, ttl=1)
 
@@ -502,10 +499,7 @@ async def test_set_many_with_ttl(memory_store):
 @pytest.mark.asyncio
 async def test_set_many_zero_ttl(memory_store):
     """Test set_many with zero TTL (no expiration)."""
-    items = {
-        "key1": "value1",
-        "key2": "value2"
-    }
+    items = {"key1": "value1", "key2": "value2"}
 
     results = await memory_store.set_many(items, ttl=0)
 
@@ -518,6 +512,7 @@ async def test_set_many_zero_ttl(memory_store):
 
     # Wait a bit and check again
     import asyncio
+
     await asyncio.sleep(0.1)
 
     assert await memory_store.get("key1") == "value1"
@@ -532,11 +527,7 @@ async def test_set_many_overwrite_existing(memory_store):
     await memory_store.set("key2", "original2", ttl=60)
 
     # Overwrite with set_many
-    items = {
-        "key1": "new1",
-        "key2": "new2",
-        "key3": "new3"
-    }
+    items = {"key1": "new1", "key2": "new2", "key3": "new3"}
 
     results = await memory_store.set_many(items, ttl=60)
 
@@ -553,11 +544,7 @@ async def test_set_many_overwrite_existing(memory_store):
 @pytest.mark.asyncio
 async def test_set_many_return_values(memory_store):
     """Test that set_many returns correct boolean dict."""
-    items = {
-        "key1": "value1",
-        "key2": "value2",
-        "key3": "value3"
-    }
+    items = {"key1": "value1", "key2": "value2", "key3": "value3"}
 
     results = await memory_store.set_many(items, ttl=60)
 
@@ -584,9 +571,10 @@ async def test_delete_many_mixed(memory_store):
     # Verify deleted keys are gone
     assert await memory_store.get("del:1") is None
     assert await memory_store.get("del:2") is None
-    
+
     # Verify untouched key remains
     assert await memory_store.get("del:3") == "val3"
+
 
 @pytest.mark.asyncio
 async def test_delete_many_empty(memory_store):

@@ -21,7 +21,9 @@ class AbstractStore(ABC):
         pass
 
     @abstractmethod
-    async def get_many(self, keys: list[str], default: Optional[Any] = None) -> dict[str, Optional[Any]]:
+    async def get_many(
+        self, keys: list[str], default: Optional[Any] = None
+    ) -> dict[str, Optional[Any]]:
         """Get multiple values from the store."""
         pass
 
@@ -34,4 +36,3 @@ class AbstractStore(ABC):
     async def delete_many(self, keys: list[str]) -> int:
         """Delete multiple values from the store. Returns count of deleted items."""
         pass
-
