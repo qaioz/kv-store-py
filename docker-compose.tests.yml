@@ -1,0 +1,14 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      # Maps Host Port (from env) to Container Port (6379)
+      - "${REDIS_PORT:-6379}:6379"
+    # Passes the password from env to the redis startup command
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 3
