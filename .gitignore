@@ -130,3 +130,4 @@ ehthumbs.db
 Thumbs.db
 .pypirc
 *repomix*
+docker-compose.tests.yml
