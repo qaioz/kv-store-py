@@ -1,23 +1,7 @@
 import asyncio
 
 import pytest
-import pytest_asyncio
 import redis
-from redis.asyncio import Redis
-
-from src.kv_store import RedisStore
-
-
-@pytest_asyncio.fixture
-async def redis_client():
-    client = Redis(host="localhost", port=6379, db=0, password="grunge38")
-    yield client
-    await client.aclose()
-
-
-@pytest_asyncio.fixture
-async def redis_store(redis_client):
-    return RedisStore(redis_client)
 
 
 @pytest.mark.asyncio

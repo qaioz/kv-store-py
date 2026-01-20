@@ -1,12 +1,4 @@
 import pytest
-import pytest_asyncio
-
-from src.kv_store import InMemoryStore
-
-
-@pytest_asyncio.fixture
-async def memory_store():
-    return InMemoryStore()
 
 
 @pytest.mark.asyncio
