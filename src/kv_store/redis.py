@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import json
-from typing import Any, Optional, Self, Union
+from typing import Any, Optional, Union
 
 import redis.asyncio as redis
 from redis.asyncio.lock import Lock
@@ -24,7 +26,7 @@ class RedisStore(AbstractStore):
         cls,
         url: str,
         **kwargs,
-    ) -> Self:
+    ) -> RedisStore:
         """Create a RedisStore from a Redis URL.
 
         Args:
