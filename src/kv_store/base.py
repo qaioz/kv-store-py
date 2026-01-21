@@ -44,3 +44,15 @@ class AbstractStore(ABC):
     async def delete_many(self, keys: list[str]) -> int:
         """Delete multiple values from the store. Returns count of deleted items."""
         pass
+
+    async def close(self) -> None:
+        """Close the store and release resources. Override in subclasses if needed."""
+        pass
+
+    async def __aenter__(self) -> "AbstractStore":
+        """Async context manager entry."""
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Async context manager exit - closes the store."""
+        await self.close()

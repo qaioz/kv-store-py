@@ -536,3 +536,73 @@ async def test_get_many_list_default_length_mismatch_uses_single(redis_store):
     assert results["key1"] == ["a", "b"]
     assert results["key2"] == ["a", "b"]
     assert results["key3"] == ["a", "b"]
+
+
+# --- Resource Management Tests ---
+
+
+@pytest.mark.asyncio
+async def test_from_url_creates_working_store():
+    """Test that from_url creates a functional store."""
+    from src.kv_store import RedisStore
+    from tests.settings import test_settings
+
+    password_part = (
+        f":{test_settings.redis_password}@" if test_settings.redis_password else ""
+    )
+    url = f"redis://{password_part}{test_settings.redis_host}:{test_settings.redis_port}/0"
+
+    store = await RedisStore.from_url(url)
+    try:
+        # Verify it works
+        await store.set("test:from_url", "value", ttl=60)
+        result = await store.get("test:from_url")
+        assert result == "value"
+        await store.delete("test:from_url")
+    finally:
+        await store.close()
+
+
+@pytest.mark.asyncio
+async def test_from_url_with_context_manager():
+    """Test that from_url works with async context manager."""
+    from src.kv_store import RedisStore
+    from tests.settings import test_settings
+
+    password_part = (
+        f":{test_settings.redis_password}@" if test_settings.redis_password else ""
+    )
+    url = f"redis://{password_part}{test_settings.redis_host}:{test_settings.redis_port}/0"
+
+    async with await RedisStore.from_url(url) as store:
+        await store.set("test:context_manager", "value", ttl=60)
+        result = await store.get("test:context_manager")
+        assert result == "value"
+        await store.delete("test:context_manager")
+    # Connection should be closed after exiting context
+
+
+@pytest.mark.asyncio
+async def test_injected_client_not_closed_by_store(redis_client):
+    """Test that an injected client is NOT closed when store.close() is called."""
+    from src.kv_store import RedisStore
+
+    store = RedisStore(redis_client)
+    await store.close()
+
+    # Client should still be usable
+    await redis_client.ping()
+
+
+@pytest.mark.asyncio
+async def test_context_manager_with_injected_client(redis_client):
+    """Test context manager with injected client doesn't close the client."""
+    from src.kv_store import RedisStore
+
+    async with RedisStore(redis_client) as store:
+        await store.set("test:injected_ctx", "value", ttl=60)
+
+    # Client should still work after context manager exits
+    result = await redis_client.get("test:injected_ctx")
+    assert result is not None
+    await redis_client.delete("test:injected_ctx")

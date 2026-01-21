@@ -1,5 +1,5 @@
 import json
-from typing import Any, Optional, Union
+from typing import Any, Optional, Self, Union
 
 import redis.asyncio as redis
 from redis.asyncio.lock import Lock
@@ -8,8 +8,45 @@ from .base import AbstractStore
 
 
 class RedisStore(AbstractStore):
-    def __init__(self, client: redis.Redis):
+    def __init__(self, client: redis.Redis, *, _owns_client: bool = False):
+        """Initialize RedisStore with a Redis client.
+
+        Args:
+            client: An async Redis client instance.
+            _owns_client: Internal flag indicating if this store owns the client
+                and should close it. Set automatically by from_url().
+        """
         self.client = client
+        self._owns_client = _owns_client
+
+    @classmethod
+    async def from_url(
+        cls,
+        url: str,
+        **kwargs,
+    ) -> Self:
+        """Create a RedisStore from a Redis URL.
+
+        Args:
+            url: Redis URL (e.g., "redis://localhost:6379/0" or
+                "redis://user:password@localhost:6379/0").
+            **kwargs: Additional arguments passed to Redis.from_url().
+
+        Returns:
+            A new RedisStore instance that owns its client connection.
+
+        Example:
+            store = await RedisStore.from_url("redis://localhost:6379/0")
+            async with store:
+                await store.set("key", "value", ttl=3600)
+        """
+        client = redis.Redis.from_url(url, **kwargs)
+        return cls(client, _owns_client=True)
+
+    async def close(self) -> None:
+        """Close the Redis connection if this store owns it."""
+        if self._owns_client:
+            await self.client.aclose()
 
     def _serialize(self, value: Any) -> Any:
         """
