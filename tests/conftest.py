@@ -13,7 +13,7 @@ async def redis_client():
         host=test_settings.redis_host,
         port=test_settings.redis_port,
         db=0,
-        password=test_settings.redis_password,
+        password=test_settings.redis_password or None,
         decode_responses=False,
     )
 
