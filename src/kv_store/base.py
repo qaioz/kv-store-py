@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 
 class AbstractStore(ABC):
@@ -22,9 +22,17 @@ class AbstractStore(ABC):
 
     @abstractmethod
     async def get_many(
-        self, keys: list[str], default: Optional[Any] = None
+        self,
+        keys: list[str],
+        default: Optional[Union[Any, list[Any]]] = None,
     ) -> dict[str, Optional[Any]]:
-        """Get multiple values from the store."""
+        """Get multiple values from the store.
+
+        Args:
+            keys: List of keys to retrieve.
+            default: Either a single default value (used for all missing keys)
+                or a list of default values (one per key, must match len(keys)).
+        """
         pass
 
     @abstractmethod

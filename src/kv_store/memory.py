@@ -1,5 +1,5 @@
 from time import time
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 from .base import AbstractStore
 
@@ -38,15 +38,27 @@ class InMemoryStore(AbstractStore):
         return False
 
     async def get_many(
-        self, keys: list[str], default: Optional[Any] = None
+        self,
+        keys: list[str],
+        default: Optional[Union[Any, list[Any]]] = None,
     ) -> dict[str, Optional[Any]]:
-        """Get multiple values from the store."""
+        """Get multiple values from the store.
+
+        Args:
+            keys: List of keys to retrieve.
+            default: Either a single default value (used for all missing keys)
+                or a list of default values (one per key, must match len(keys)).
+        """
         if not keys:
             return {}
 
+        # Check if default is a list with same length as keys
+        use_list_defaults = isinstance(default, list) and len(default) == len(keys)
+
         results = {}
-        for key in keys:
-            result = await self.get(key, default)
+        for i, key in enumerate(keys):
+            key_default = default[i] if use_list_defaults else default
+            result = await self.get(key, key_default)
             results[key] = result
 
         return results

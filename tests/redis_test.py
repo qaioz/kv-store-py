@@ -1,23 +1,7 @@
 import asyncio
 
 import pytest
-import pytest_asyncio
 import redis
-from redis.asyncio import Redis
-
-from src.kv_store import RedisStore
-
-
-@pytest_asyncio.fixture
-async def redis_client():
-    client = Redis(host="localhost", port=6379, db=0, password="grunge38")
-    yield client
-    await client.aclose()
-
-
-@pytest_asyncio.fixture
-async def redis_store(redis_client):
-    return RedisStore(redis_client)
 
 
 @pytest.mark.asyncio
@@ -494,3 +478,61 @@ async def test_delete_many_mixed(redis_store):
 async def test_delete_many_empty(redis_store):
     """Test delete_many with empty list."""
     assert await redis_store.delete_many([]) == 0
+
+
+@pytest.mark.asyncio
+async def test_get_many_with_list_of_defaults(redis_store):
+    """Test get_many with a list of default values (one per key)."""
+    existing_key = "test:many:list:existing"
+    missing_key1 = "test:many:list:missing1"
+    missing_key2 = "test:many:list:missing2"
+
+    await redis_store.set(existing_key, "actual_value", ttl=60)
+
+    keys = [existing_key, missing_key1, missing_key2]
+    defaults = ["default1", "default2", "default3"]
+
+    results = await redis_store.get_many(keys, default=defaults)
+
+    assert len(results) == 3
+    assert results[existing_key] == "actual_value"  # actual value, not default
+    assert results[missing_key1] == "default2"  # second default
+    assert results[missing_key2] == "default3"  # third default
+
+
+@pytest.mark.asyncio
+async def test_get_many_with_list_of_defaults_all_missing(redis_store):
+    """Test get_many with list of defaults when all keys are missing."""
+    keys = ["missing1", "missing2", "missing3"]
+    defaults = ["def1", "def2", "def3"]
+
+    results = await redis_store.get_many(keys, default=defaults)
+
+    assert results == {"missing1": "def1", "missing2": "def2", "missing3": "def3"}
+
+
+@pytest.mark.asyncio
+async def test_get_many_with_list_of_defaults_mixed_types(redis_store):
+    """Test get_many with list of defaults containing different types."""
+    keys = ["key1", "key2", "key3"]
+    defaults = ["string_default", {"dict": "default"}, 42]
+
+    results = await redis_store.get_many(keys, default=defaults)
+
+    assert results["key1"] == "string_default"
+    assert results["key2"] == {"dict": "default"}
+    assert results["key3"] == 42
+
+
+@pytest.mark.asyncio
+async def test_get_many_list_default_length_mismatch_uses_single(redis_store):
+    """Test that if default list length doesn't match keys, it's treated as single value."""
+    keys = ["key1", "key2", "key3"]
+    defaults = ["a", "b"]  # Length 2, but 3 keys
+
+    results = await redis_store.get_many(keys, default=defaults)
+
+    # Should use the list as single default for all keys
+    assert results["key1"] == ["a", "b"]
+    assert results["key2"] == ["a", "b"]
+    assert results["key3"] == ["a", "b"]

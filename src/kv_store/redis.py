@@ -1,5 +1,5 @@
 import json
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 import redis.asyncio as redis
 from redis.asyncio.lock import Lock
@@ -49,17 +49,29 @@ class RedisStore(AbstractStore):
         return result > 0
 
     async def get_many(
-        self, keys: list[str], default: Optional[Any] = None
+        self,
+        keys: list[str],
+        default: Optional[Union[Any, list[Any]]] = None,
     ) -> dict[str, Optional[Any]]:
+        """Get multiple values from the store.
+
+        Args:
+            keys: List of keys to retrieve.
+            default: Either a single default value (used for all missing keys)
+                or a list of default values (one per key, must match len(keys)).
+        """
         if not keys:
             return {}
+
+        # Check if default is a list with same length as keys
+        use_list_defaults = isinstance(default, list) and len(default) == len(keys)
 
         values = await self.client.mget(keys)
         results = {}
 
-        for key, value in zip(keys, values):
+        for i, (key, value) in enumerate(zip(keys, values)):
             if value is None:
-                results[key] = default
+                results[key] = default[i] if use_list_defaults else default
             else:
                 results[key] = self._deserialize(value)
         return results
