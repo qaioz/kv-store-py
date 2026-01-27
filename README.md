@@ -11,7 +11,13 @@ Easy and practical key value store.
 - Implemented as Asyncrounous context manager
 - Supports distributed locking in all implementations
 
-## Quick Start
+### Installation
+
+```bash
+pip install kv-store-py
+```
+
+### Quick Start
 
 ```python
 from kv_store_py import AbstractStore, RedisStore, PostgresStore
@@ -32,11 +38,11 @@ async with store.lock("my-resource", timeout=30):
     pass
 ```
 
-## API Reference
+### API Reference
 
 All store implementations share the same async interface:
 
-### Single Key Operations
+#### Core Operations
 
 ```python
 # Get a value (returns default if key doesn't exist or is expired)
@@ -47,11 +53,7 @@ success = await store.set(key: str, value: Any, ttl: int) -> bool
 
 # Delete a key
 existed = await store.delete(key: str) -> bool
-```
 
-### Batch Operations
-
-```python
 # Get multiple keys at once
 results = await store.get_many(
     keys: list[str],
@@ -65,7 +67,7 @@ results = await store.set_many(items: dict[str, Any], ttl: int) -> dict[str, boo
 count = await store.delete_many(keys: list[str]) -> int
 ```
 
-### Distributed Locking
+#### Distributed Locking
 
 ```python
 # Acquire a lock for mutual exclusion
@@ -74,7 +76,22 @@ async with store.lock("resource:id", timeout=30, blocking_timeout=10):
     await perform_exclusive_operation()
 ```
 
-## Supported Backends
+#### PostgreSQL Options
+
+When using `PostgresStore.from_url()`, you can customize the connection pool and table name:
+
+```python
+store = await PostgresStore.from_url(
+    "postgresql://localhost/mydb",
+    table_name="custom_kv",  # Default: "kv_store"
+    min_size=2,              # Minimum pool connections
+    max_size=10              # Maximum pool connections
+)
+```
+
+PostgreSQL uses **table-based locking** with auto-expiration tokens (not advisory locks).
+
+### Supported Backends
 
 | Backend | Status | Class |
 |---------|--------|-------|
@@ -88,10 +105,10 @@ async with store.lock("resource:id", timeout=30, blocking_timeout=10):
 | SQLite | Planned | - |
 | MySQL | Planned | - |
 
-## Contributing
+### Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
-## License
+### License
 
 MIT License - see [LICENSE](LICENSE) for details.
