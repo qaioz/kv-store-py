@@ -28,34 +28,22 @@ pip install kv-store-py redis
 ## Quick Start
 
 ```python
-import asyncio
-from kv_store import RedisStore
+from kv_store import AbstractStore, RedisStore, PostgresStore
 
-async def main():
-    # Simple: create from URL with automatic resource management
-    async with await RedisStore.from_url("redis://localhost:6379/0") as store:
-        await store.set("user:1", {"name": "Alice", "email": "alice@example.com"}, ttl=3600)
-        user = await store.get("user:1")
-        print(user)  # {'name': 'Alice', 'email': 'alice@example.com'}
+# Use Redis
+store: AbstractStore = await RedisStore.from_url("redis://localhost:6379/0")
+await store.set("key", "value", ttl=3600)
+await store.get("key")
 
-asyncio.run(main())
-```
+# Swap to Postgres - same interface
+store: AbstractStore = await PostgresStore.from_url("postgresql://localhost/mydb")
+await store.set_many({"k1": "v1", "k2": "v2"}, ttl=3600)
+await store.get_many(["k1", "k2"])
 
-### Alternative: Inject Your Own Client
-
-```python
-from redis.asyncio import Redis
-from kv_store import RedisStore
-
-async def main():
-    # Advanced: manage the Redis client yourself
-    client = Redis(host="localhost", port=6379)
-    store = RedisStore(client)
-
-    await store.set("key", "value", ttl=3600)
-
-    # You manage the client lifecycle
-    await client.aclose()
+# Distributed locking (supported by both Redis and Postgres)
+async with store.lock("my-resource", timeout=30):
+    # critical section
+    pass
 ```
 
 ## API Reference
@@ -91,7 +79,7 @@ results = await store.set_many(items: dict[str, Any], ttl: int) -> dict[str, boo
 count = await store.delete_many(keys: list[str]) -> int
 ```
 
-### Distributed Locking (Redis only)
+### Distributed Locking
 
 ```python
 # Acquire a lock for mutual exclusion
@@ -104,11 +92,11 @@ async with store.lock("resource:id", timeout=30, blocking_timeout=10):
 
 | Backend | Status | Class |
 |---------|--------|-------|
-| Redis | Available | `RedisStore` |
 | In-Memory | Available | `InMemoryStore` |
+| Redis | Available | `RedisStore` |
+| PostgreSQL | Available | `PostgresStore` |
 | Valkey | Planned | - |
 | SQLite | Planned | - |
-| PostgreSQL | Planned | - |
 | MySQL | Planned | - |
 
 ## Contributing
