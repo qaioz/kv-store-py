@@ -204,31 +204,39 @@ class PostgresStore(AbstractStore):
         """Create the KV store and locks tables if they don't exist."""
         async with self._pool.acquire() as conn:
             # KV store table
-            await conn.execute(f"""
+            await conn.execute(
+                f"""
                 CREATE TABLE IF NOT EXISTS {self._table_name} (
                     key TEXT PRIMARY KEY,
                     value JSONB NOT NULL,
                     expires_at TIMESTAMPTZ
                 )
-            """)
-            await conn.execute(f"""
+            """
+            )
+            await conn.execute(
+                f"""
                 CREATE INDEX IF NOT EXISTS idx_{self._table_name}_expires
                 ON {self._table_name}(expires_at)
                 WHERE expires_at IS NOT NULL
-            """)
+            """
+            )
 
             # Locks table
-            await conn.execute(f"""
+            await conn.execute(
+                f"""
                 CREATE TABLE IF NOT EXISTS {self._lock_table_name} (
                     name TEXT PRIMARY KEY,
                     token TEXT NOT NULL,
                     expires_at TIMESTAMPTZ NOT NULL
                 )
-            """)
-            await conn.execute(f"""
+            """
+            )
+            await conn.execute(
+                f"""
                 CREATE INDEX IF NOT EXISTS idx_{self._lock_table_name}_expires
                 ON {self._lock_table_name}(expires_at)
-            """)
+            """
+            )
 
     async def close(self) -> None:
         """Close the connection pool if this store owns it."""

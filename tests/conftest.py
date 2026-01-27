@@ -1,10 +1,9 @@
+import asyncpg
 import pytest
 import pytest_asyncio
 from redis.asyncio import Redis
 
-import asyncpg
-
-from src.kv_store import InMemoryStore, RedisStore, PostgresStore
+from src.kv_store import InMemoryStore, PostgresStore, RedisStore
 from tests.settings import test_settings
 
 
