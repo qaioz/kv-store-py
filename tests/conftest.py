@@ -3,7 +3,7 @@ import pytest
 import pytest_asyncio
 from redis.asyncio import Redis
 
-from src.kv_store import InMemoryStore, PostgresStore, RedisStore
+from src.kv_store_py import InMemoryStore, PostgresStore, RedisStore
 from tests.settings import test_settings
 
 

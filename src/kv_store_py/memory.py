@@ -1,7 +1,65 @@
+import asyncio
+from contextlib import AbstractAsyncContextManager
 from time import time
 from typing import Any, Optional, Union
 
 from .base import AbstractStore
+
+
+class InMemoryLock(AbstractAsyncContextManager):
+    """Simple in-memory async lock."""
+
+    _locks: dict[str, asyncio.Lock] = {}
+
+    def __init__(
+        self,
+        name: str,
+        timeout: float = 30.0,
+        blocking_timeout: Optional[float] = None,
+    ):
+        self._name = name
+        self._timeout = timeout
+        self._blocking_timeout = blocking_timeout
+        if name not in InMemoryLock._locks:
+            InMemoryLock._locks[name] = asyncio.Lock()
+        self._lock = InMemoryLock._locks[name]
+
+    async def acquire(self) -> bool:
+        """Acquire the lock."""
+        try:
+            if self._blocking_timeout == 0:
+                # Non-blocking: return immediately if locked
+                if self._lock.locked():
+                    return False
+                # Try to acquire with minimal timeout
+                await asyncio.wait_for(self._lock.acquire(), timeout=0.001)
+                return True
+            elif self._blocking_timeout is None:
+                await self._lock.acquire()
+                return True
+            else:
+                await asyncio.wait_for(
+                    self._lock.acquire(), timeout=self._blocking_timeout
+                )
+                return True
+        except asyncio.TimeoutError:
+            return False
+
+    async def release(self) -> None:
+        """Release the lock."""
+        try:
+            self._lock.release()
+        except RuntimeError:
+            pass
+
+    async def __aenter__(self) -> "InMemoryLock":
+        acquired = await self.acquire()
+        if not acquired:
+            raise TimeoutError(f"Could not acquire lock '{self._name}'")
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        await self.release()
 
 
 class InMemoryStore(AbstractStore):
@@ -80,3 +138,22 @@ class InMemoryStore(AbstractStore):
                 del self._store[key]
                 count += 1
         return count
+
+    def lock(
+        self,
+        name: str,
+        timeout: float = 30.0,
+        blocking_timeout: Optional[float] = None,
+    ) -> InMemoryLock:
+        """Get an in-memory lock.
+
+        Args:
+            name: The lock name/key.
+            timeout: Not used for in-memory locks (kept for interface compatibility).
+            blocking_timeout: How long to wait to acquire the lock.
+                None = wait forever, 0 = fail immediately if not available.
+
+        Returns:
+            An InMemoryLock context manager.
+        """
+        return InMemoryLock(name, timeout=timeout, blocking_timeout=blocking_timeout)

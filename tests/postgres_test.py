@@ -546,7 +546,7 @@ async def test_get_many_list_default_length_mismatch_uses_single(postgres_store)
 @pytest.mark.asyncio
 async def test_from_url_creates_working_store():
     """Test that from_url creates a functional store."""
-    from src.kv_store import PostgresStore
+    from src.kv_store_py import PostgresStore
     from tests.settings import test_settings
 
     store = await PostgresStore.from_url(test_settings.postgres_dsn)
@@ -564,7 +564,7 @@ async def test_from_url_creates_working_store():
 @pytest.mark.asyncio
 async def test_from_url_with_context_manager():
     """Test that from_url works with async context manager."""
-    from src.kv_store import PostgresStore
+    from src.kv_store_py import PostgresStore
     from tests.settings import test_settings
 
     async with await PostgresStore.from_url(test_settings.postgres_dsn) as store:
@@ -579,7 +579,7 @@ async def test_from_url_with_context_manager():
 @pytest.mark.asyncio
 async def test_injected_pool_not_closed_by_store(postgres_pool):
     """Test that an injected pool is NOT closed when store.close() is called."""
-    from src.kv_store import PostgresStore
+    from src.kv_store_py import PostgresStore
 
     store = PostgresStore(postgres_pool)
     await store.close()
@@ -592,7 +592,7 @@ async def test_injected_pool_not_closed_by_store(postgres_pool):
 @pytest.mark.asyncio
 async def test_context_manager_with_injected_pool(postgres_pool):
     """Test context manager with injected pool doesn't close the pool."""
-    from src.kv_store import PostgresStore
+    from src.kv_store_py import PostgresStore
 
     async with PostgresStore(postgres_pool, table_name="kv_store_test") as store:
         await store.create_table()

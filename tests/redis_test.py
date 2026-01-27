@@ -544,7 +544,7 @@ async def test_get_many_list_default_length_mismatch_uses_single(redis_store):
 @pytest.mark.asyncio
 async def test_from_url_creates_working_store():
     """Test that from_url creates a functional store."""
-    from src.kv_store import RedisStore
+    from src.kv_store_py import RedisStore
     from tests.settings import test_settings
 
     password_part = (
@@ -566,7 +566,7 @@ async def test_from_url_creates_working_store():
 @pytest.mark.asyncio
 async def test_from_url_with_context_manager():
     """Test that from_url works with async context manager."""
-    from src.kv_store import RedisStore
+    from src.kv_store_py import RedisStore
     from tests.settings import test_settings
 
     password_part = (
@@ -585,7 +585,7 @@ async def test_from_url_with_context_manager():
 @pytest.mark.asyncio
 async def test_injected_client_not_closed_by_store(redis_client):
     """Test that an injected client is NOT closed when store.close() is called."""
-    from src.kv_store import RedisStore
+    from src.kv_store_py import RedisStore
 
     store = RedisStore(redis_client)
     await store.close()
@@ -597,7 +597,7 @@ async def test_injected_client_not_closed_by_store(redis_client):
 @pytest.mark.asyncio
 async def test_context_manager_with_injected_client(redis_client):
     """Test context manager with injected client doesn't close the client."""
-    from src.kv_store import RedisStore
+    from src.kv_store_py import RedisStore
 
     async with RedisStore(redis_client) as store:
         await store.set("test:injected_ctx", "value", ttl=60)

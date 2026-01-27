@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from contextlib import AbstractAsyncContextManager
 from typing import Any, Optional, Union
 
 
@@ -43,6 +44,32 @@ class AbstractStore(ABC):
     @abstractmethod
     async def delete_many(self, keys: list[str]) -> int:
         """Delete multiple values from the store. Returns count of deleted items."""
+        pass
+
+    @abstractmethod
+    def lock(
+        self,
+        name: str,
+        timeout: float = 30.0,
+        blocking_timeout: Optional[float] = None,
+    ) -> AbstractAsyncContextManager:
+        """Get a distributed lock.
+
+        Args:
+            name: The lock name/key.
+            timeout: Lock auto-expires after this many seconds (prevents deadlocks).
+            blocking_timeout: How long to wait to acquire the lock.
+                None = wait forever, 0 = fail immediately if not available.
+
+        Returns:
+            An async context manager for the lock.
+
+        Example:
+            async with store.lock("my-resource", timeout=30.0):
+                # Lock held
+                do_work()
+            # Lock released
+        """
         pass
 
     async def close(self) -> None:
