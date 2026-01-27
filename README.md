@@ -8,8 +8,9 @@
 Easy and practical key value store.
 
 - get, set, get_many, set_many methods with handy defaults
-- Implemented as Asyncrounous context manager
+- Implemented as Asynchronous context manager
 - Supports distributed locking in all implementations
+- Supports multiple value types: strings, numbers, booleans, lists, and dicts (JSON-serializable types)
 
 ### Installation
 
@@ -26,6 +27,13 @@ from kv_store_py import AbstractStore, RedisStore, PostgresStore
 store: AbstractStore = await RedisStore.from_url("redis://localhost:6379/0")
 await store.set("key", "value", ttl=3600)
 await store.get("key")
+
+# Supports multiple value types
+await store.set("name", "alice", ttl=3600)          # string
+await store.set("count", 42, ttl=3600)              # number
+await store.set("active", True, ttl=3600)           # boolean
+await store.set("tags", ["a", "b", "c"], ttl=3600)  # list
+await store.set("user", {"name": "alice", "age": 30}, ttl=3600)  # dict
 
 # Swap to Postgres - same interface
 store: AbstractStore = await PostgresStore.from_url("postgresql://localhost/mydb")
