@@ -1,4 +1,4 @@
-.PHONY: install test lint format check clean
+.PHONY: install test lint format check clean clean-dist build publish release
 
 install:
 	uv sync --group dev
@@ -20,3 +20,14 @@ clean:
 	find . -type d -name "__pycache__" -delete
 	rm -rf .pytest_cache
 	rm -rf .coverage
+
+clean-dist:
+	rm -rf dist/*.whl dist/*.tar.gz build/ src/*.egg-info
+
+build: clean-dist
+	uv build
+
+publish:
+	uv publish
+
+release: check build publish
