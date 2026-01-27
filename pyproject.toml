@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kv-store-py"
-version = "0.0.6"
+version = "0.0.7"
 description = "A simple wrapper for key-value stores supporting Python dict, Redis, Valkey, PostgreSQL, Memcached, and SQLite and other backend clients."
 readme = "README.md"
 requires-python = ">=3.10"
