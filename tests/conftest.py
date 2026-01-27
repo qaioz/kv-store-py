@@ -2,7 +2,9 @@ import pytest
 import pytest_asyncio
 from redis.asyncio import Redis
 
-from src.kv_store import InMemoryStore, RedisStore
+import asyncpg
+
+from src.kv_store import InMemoryStore, RedisStore, PostgresStore
 from tests.settings import test_settings
 
 
@@ -37,3 +39,33 @@ async def redis_store(redis_client):
 @pytest_asyncio.fixture
 async def memory_store():
     return InMemoryStore()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def postgres_pool():
+    """Create a Postgres connection pool for testing."""
+    try:
+        pool = await asyncpg.create_pool(
+            test_settings.postgres_dsn,
+            min_size=2,
+            max_size=5,
+        )
+    except Exception as e:
+        pytest.fail(f"Could not connect to PostgreSQL: {e}")
+
+    yield pool
+
+    await pool.close()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def postgres_store(postgres_pool):
+    """Returns an instance of PostgresStore, with table created and cleared after each test."""
+    store = PostgresStore(postgres_pool, table_name="kv_store_test")
+    await store.create_table()
+
+    yield store
+
+    # Clean up table after test
+    async with postgres_pool.acquire() as conn:
+        await conn.execute("TRUNCATE TABLE kv_store_test")

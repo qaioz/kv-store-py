@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "kv-store-py"
 version = "0.0.5"
-description = "A simple wrapper for key-value stores supporting Python dict, Redis, Valkey, Memcached, and SQLite and other backend clients."
+description = "A simple wrapper for key-value stores supporting Python dict, Redis, Valkey, PostgreSQL, Memcached, and SQLite and other backend clients."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
@@ -36,6 +36,7 @@ classifiers = [
 dependencies = [
     "pydantic-settings>=2.12.0",
     "redis>=7.1.0",
+    "asyncpg>=0.30.0",
 ]
 
 [project.urls]

@@ -8,4 +8,11 @@ try:
 except ImportError:
     RedisStore = None
 
-__all__ = ["AbstractStore", "InMemoryStore", "RedisStore"]
+# We try to import PostgresStore, but if the user didn't install asyncpg,
+# we don't crash the whole app—we just make PostgresStore unavailable.
+try:
+    from .postgres import PostgresStore
+except ImportError:
+    PostgresStore = None
+
+__all__ = ["AbstractStore", "InMemoryStore", "RedisStore", "PostgresStore"]
