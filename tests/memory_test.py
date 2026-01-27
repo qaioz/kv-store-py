@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 
@@ -630,3 +632,86 @@ async def test_get_many_list_default_length_mismatch_uses_single(memory_store):
     assert results["key1"] == ["a", "b"]
     assert results["key2"] == ["a", "b"]
     assert results["key3"] == ["a", "b"]
+
+
+@pytest.mark.asyncio
+async def test_lock_acquire_and_release(memory_store):
+    """Test that the context manager acquires and releases the lock."""
+    lock_name = "test:lock:basic"
+
+    # Acquire lock
+    async with memory_store.lock(lock_name):
+        # Lock should be held
+        lock = memory_store.lock(lock_name, blocking_timeout=0)
+        acquired = await lock.acquire()
+        assert acquired is False  # Cannot acquire while held
+
+    # After exiting, lock should be released
+    lock = memory_store.lock(lock_name, blocking_timeout=0)
+    acquired = await lock.acquire()
+    assert acquired is True
+    await lock.release()
+
+
+@pytest.mark.asyncio
+async def test_lock_mutual_exclusion(memory_store):
+    """Test that two locks on the same name cannot be held simultaneously."""
+    lock_name = "test:lock:exclusion"
+
+    async with memory_store.lock(lock_name):
+        # While holding the lock, try to acquire it again
+        # Should raise TimeoutError because blocking_timeout=0.1
+        with pytest.raises(TimeoutError):
+            async with memory_store.lock(lock_name, blocking_timeout=0.1):
+                pass
+
+
+@pytest.mark.asyncio
+async def test_lock_blocking_timeout_failure(memory_store):
+    """Test that acquiring a lock fails if the timeout is exceeded."""
+    lock_name = "test:lock:timeout"
+
+    # Create a background task that holds the lock for 2 seconds
+    async def hold_lock_task():
+        async with memory_store.lock(lock_name):
+            await asyncio.sleep(2)
+
+    # Start the background task
+    task = asyncio.create_task(hold_lock_task())
+
+    # Give the task a moment to acquire the lock
+    await asyncio.sleep(0.1)
+
+    # Try to acquire the lock with a 0.5s timeout (should fail)
+    try:
+        with pytest.raises(TimeoutError):
+            async with memory_store.lock(lock_name, blocking_timeout=0.5):
+                pass
+    finally:
+        await task
+
+
+@pytest.mark.asyncio
+async def test_lock_blocking_timeout_success(memory_store):
+    """Test that we successfully acquire the lock after waiting for it to free up."""
+    lock_name = "test:lock:wait"
+
+    # Create a background task that holds the lock for only 0.5 seconds
+    async def hold_lock_task():
+        async with memory_store.lock(lock_name):
+            await asyncio.sleep(0.5)
+
+    # Start the background task
+    task = asyncio.create_task(hold_lock_task())
+
+    # Give the task a moment to acquire the lock
+    await asyncio.sleep(0.1)
+
+    # Try to acquire the lock with a 2.0s timeout
+    # Since the other task releases it in 0.5s, this should succeed
+    try:
+        async with memory_store.lock(lock_name, blocking_timeout=2.0):
+            # If we reached here, we successfully waited and acquired the lock
+            assert True
+    finally:
+        await task

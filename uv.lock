@@ -199,7 +199,7 @@ wheels = [
 
 [[package]]
 name = "kv-store-py"
-version = "0.0.5"
+version = "0.0.6"
 source = { editable = "." }
 dependencies = [
     { name = "asyncpg" },
