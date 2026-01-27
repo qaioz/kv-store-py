@@ -5,30 +5,16 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A unified async interface for key-value stores in Python. Write your caching logic once, swap backends without changing code.
+Easy and practical key value store.
 
-## Installation
-
-```bash
-pip install kv-store-py
-```
-
-Or with [uv](https://github.com/astral-sh/uv):
-
-```bash
-uv add kv-store-py
-```
-
-For Redis support:
-
-```bash
-pip install kv-store-py redis
-```
+- get, set, get_many, set_many methods with handy defaults
+- Implemented as Asyncrounous context manager
+- Supports distributed locking in all implementations
 
 ## Quick Start
 
 ```python
-from kv_store import AbstractStore, RedisStore, PostgresStore
+from kv_store_py import AbstractStore, RedisStore, PostgresStore
 
 # Use Redis
 store: AbstractStore = await RedisStore.from_url("redis://localhost:6379/0")
@@ -95,6 +81,9 @@ async with store.lock("resource:id", timeout=30, blocking_timeout=10):
 | In-Memory | Available | `InMemoryStore` |
 | Redis | Available | `RedisStore` |
 | PostgreSQL | Available | `PostgresStore` |
+
+> **Note:** PostgreSQL support was tested only on PostgreSQL 16. There is no guarantee it works on other versions.
+
 | Valkey | Planned | - |
 | SQLite | Planned | - |
 | MySQL | Planned | - |
