@@ -66,6 +66,7 @@ async def postgres_store(postgres_pool):
 
     yield store
 
-    # Clean up table after test
+    # Clean up tables after test
     async with postgres_pool.acquire() as conn:
         await conn.execute("TRUNCATE TABLE kv_store_test")
+        await conn.execute("TRUNCATE TABLE kv_store_test_locks")

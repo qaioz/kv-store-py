@@ -387,13 +387,54 @@ async def test_lock_mutual_exclusion(postgres_store):
 
 
 @pytest.mark.asyncio
+async def test_lock_auto_expiration(postgres_store):
+    """Test that locks auto-expire after timeout."""
+    lock_name = "test:lock:expire"
+
+    # Acquire lock with 1 second timeout
+    lock = postgres_store.lock(lock_name, timeout=1.0)
+    acquired = await lock.acquire()
+    assert acquired is True
+
+    # Don't release - let it expire
+    # Wait for expiration
+    await asyncio.sleep(1.1)
+
+    # Another process should now be able to acquire it
+    async with postgres_store.lock(lock_name, timeout=30.0, blocking_timeout=0):
+        # If we got here, the expired lock was taken over
+        assert True
+
+
+@pytest.mark.asyncio
+async def test_lock_extend(postgres_store):
+    """Test extending a lock's expiration time."""
+    lock_name = "test:lock:extend"
+
+    async with postgres_store.lock(lock_name, timeout=1.0) as lock:
+        # Extend the lock before it expires
+        await asyncio.sleep(0.5)
+        extended = await lock.extend(2.0)
+        assert extended is True
+
+        # Wait past the original timeout
+        await asyncio.sleep(0.7)
+
+        # Lock should still be held (we extended it)
+        # Try to acquire with another lock - should fail
+        with pytest.raises(TimeoutError):
+            async with postgres_store.lock(lock_name, blocking_timeout=0):
+                pass
+
+
+@pytest.mark.asyncio
 async def test_lock_blocking_timeout_success(postgres_store):
     """Test that we successfully acquire the lock after waiting for it to free up."""
     lock_name = "test:lock:wait"
 
     # Create a background task that holds the lock for only 0.5 seconds
     async def hold_lock_task():
-        async with postgres_store.lock(lock_name):
+        async with postgres_store.lock(lock_name, timeout=30.0):
             await asyncio.sleep(0.5)
 
     # Start the background task

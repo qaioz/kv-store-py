@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import hashlib
+import asyncio
 import json
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncIterator, Optional, Union
@@ -12,80 +13,121 @@ from .base import AbstractStore
 
 
 class PostgresLock:
-    """Advisory lock wrapper for Postgres."""
+    """Table-based distributed lock for Postgres with auto-expiration."""
 
     def __init__(
         self,
         pool: asyncpg.Pool,
+        table_name: str,
         name: str,
         timeout: float = 30.0,
         blocking_timeout: Optional[float] = None,
     ):
+        """Initialize a PostgresLock.
+
+        Args:
+            pool: asyncpg connection pool.
+            table_name: Name of the locks table.
+            name: The lock name/key.
+            timeout: Lock auto-expires after this many seconds (prevents deadlocks).
+            blocking_timeout: How long to wait to acquire. None waits forever, 0 fails immediately.
+        """
         self._pool = pool
+        self._table_name = table_name
         self._name = name
         self._timeout = timeout
         self._blocking_timeout = blocking_timeout
-        self._lock_id = self._name_to_lock_id(name)
-        self._conn: Optional[asyncpg.Connection] = None
+        self._token: Optional[str] = None
 
-    @staticmethod
-    def _name_to_lock_id(name: str) -> int:
-        """Convert lock name to a 64-bit integer for pg_advisory_lock."""
-        hash_bytes = hashlib.sha256(name.encode()).digest()[:8]
-        return int.from_bytes(hash_bytes, byteorder="big", signed=True)
+    async def _try_acquire(self) -> bool:
+        """Attempt to acquire the lock once. Returns True if successful."""
+        token = str(uuid.uuid4())
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=self._timeout)
+
+        async with self._pool.acquire() as conn:
+            # Try to insert new lock, or take over if expired
+            result = await conn.fetchval(
+                f"""
+                INSERT INTO {self._table_name} (name, token, expires_at)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (name) DO UPDATE
+                SET token = $2, expires_at = $3
+                WHERE {self._table_name}.expires_at < NOW()
+                RETURNING token
+                """,
+                self._name,
+                token,
+                expires_at,
+            )
+
+            if result == token:
+                self._token = token
+                return True
+            return False
 
     async def acquire(self) -> bool:
-        """Acquire the advisory lock."""
-        self._conn = await self._pool.acquire()
-        try:
-            if self._blocking_timeout is None:
-                # Blocking acquire
-                await self._conn.execute(
-                    "SELECT pg_advisory_lock($1)", self._lock_id
-                )
-                return True
-            elif self._blocking_timeout == 0:
-                # Non-blocking try
-                result = await self._conn.fetchval(
-                    "SELECT pg_try_advisory_lock($1)", self._lock_id
-                )
-                if not result:
-                    await self._pool.release(self._conn)
-                    self._conn = None
-                return result
-            else:
-                # Try with timeout using statement_timeout
-                await self._conn.execute(
-                    f"SET statement_timeout = '{int(self._blocking_timeout * 1000)}'"
-                )
-                try:
-                    await self._conn.execute(
-                        "SELECT pg_advisory_lock($1)", self._lock_id
-                    )
-                    return True
-                except asyncpg.QueryCanceledError:
-                    await self._pool.release(self._conn)
-                    self._conn = None
-                    return False
-                finally:
-                    if self._conn:
-                        await self._conn.execute("SET statement_timeout = '0'")
-        except Exception:
-            if self._conn:
-                await self._pool.release(self._conn)
-                self._conn = None
-            raise
+        """Acquire the lock, optionally waiting up to blocking_timeout."""
+        # Non-blocking: try once
+        if self._blocking_timeout == 0:
+            return await self._try_acquire()
 
-    async def release(self) -> None:
-        """Release the advisory lock."""
-        if self._conn:
-            try:
-                await self._conn.execute(
-                    "SELECT pg_advisory_unlock($1)", self._lock_id
-                )
-            finally:
-                await self._pool.release(self._conn)
-                self._conn = None
+        # Blocking with optional timeout
+        start_time = asyncio.get_event_loop().time()
+        poll_interval = 0.1  # 100ms between attempts
+
+        while True:
+            if await self._try_acquire():
+                return True
+
+            # Check if we've exceeded blocking_timeout
+            if self._blocking_timeout is not None:
+                elapsed = asyncio.get_event_loop().time() - start_time
+                if elapsed >= self._blocking_timeout:
+                    return False
+
+            await asyncio.sleep(poll_interval)
+
+    async def release(self) -> bool:
+        """Release the lock. Only succeeds if we hold it (matching token)."""
+        if not self._token:
+            return False
+
+        async with self._pool.acquire() as conn:
+            result = await conn.execute(
+                f"DELETE FROM {self._table_name} WHERE name = $1 AND token = $2",
+                self._name,
+                self._token,
+            )
+            self._token = None
+            return result.split()[-1] != "0"
+
+    async def extend(self, additional_time: Optional[float] = None) -> bool:
+        """Extend the lock's expiration time.
+
+        Args:
+            additional_time: Seconds to add. Defaults to the original timeout.
+
+        Returns:
+            True if extended, False if we no longer hold the lock.
+        """
+        if not self._token:
+            return False
+
+        extension = additional_time if additional_time is not None else self._timeout
+        new_expires_at = datetime.now(timezone.utc) + timedelta(seconds=extension)
+
+        async with self._pool.acquire() as conn:
+            result = await conn.execute(
+                f"""
+                UPDATE {self._table_name}
+                SET expires_at = $1
+                WHERE name = $2 AND token = $3
+                """,
+                new_expires_at,
+                self._name,
+                self._token,
+            )
+            return result.split()[-1] != "0"
 
     async def __aenter__(self) -> "PostgresLock":
         acquired = await self.acquire()
@@ -153,9 +195,15 @@ class PostgresStore(AbstractStore):
         )
         return cls(pool, table_name=table_name, _owns_pool=True)
 
+    @property
+    def _lock_table_name(self) -> str:
+        """Name of the locks table, derived from the main table name."""
+        return f"{self._table_name}_locks"
+
     async def create_table(self) -> None:
-        """Create the KV store table if it doesn't exist."""
+        """Create the KV store and locks tables if they don't exist."""
         async with self._pool.acquire() as conn:
+            # KV store table
             await conn.execute(f"""
                 CREATE TABLE IF NOT EXISTS {self._table_name} (
                     key TEXT PRIMARY KEY,
@@ -167,6 +215,19 @@ class PostgresStore(AbstractStore):
                 CREATE INDEX IF NOT EXISTS idx_{self._table_name}_expires
                 ON {self._table_name}(expires_at)
                 WHERE expires_at IS NOT NULL
+            """)
+
+            # Locks table
+            await conn.execute(f"""
+                CREATE TABLE IF NOT EXISTS {self._lock_table_name} (
+                    name TEXT PRIMARY KEY,
+                    token TEXT NOT NULL,
+                    expires_at TIMESTAMPTZ NOT NULL
+                )
+            """)
+            await conn.execute(f"""
+                CREATE INDEX IF NOT EXISTS idx_{self._lock_table_name}_expires
+                ON {self._lock_table_name}(expires_at)
             """)
 
     async def close(self) -> None:
@@ -320,18 +381,27 @@ class PostgresStore(AbstractStore):
         timeout: float = 30.0,
         blocking_timeout: Optional[float] = None,
     ) -> PostgresLock:
-        """Returns a Postgres advisory lock to be used with `async with`.
+        """Returns a table-based distributed lock with auto-expiration.
 
         Args:
-            name: The name for the lock (will be hashed to a lock ID).
-            timeout: Not used for Postgres advisory locks (they don't auto-expire).
-            blocking_timeout: How long to wait to acquire the lock. None waits forever.
+            name: The lock name/key.
+            timeout: Lock auto-expires after this many seconds (prevents deadlocks
+                if the holder crashes without releasing).
+            blocking_timeout: How long to wait to acquire the lock.
+                None = wait forever, 0 = fail immediately if not available.
 
         Returns:
             A PostgresLock context manager.
+
+        Example:
+            async with store.lock("my-resource", timeout=30.0):
+                # Lock held, auto-expires after 30s if not released
+                do_work()
+            # Lock released
         """
         return PostgresLock(
             self._pool,
+            table_name=self._lock_table_name,
             name=name,
             timeout=timeout,
             blocking_timeout=blocking_timeout,
